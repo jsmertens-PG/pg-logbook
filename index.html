@@ -1,0 +1,2369 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b0b0b">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="apple-mobile-web-app-title" content="PG Logbook">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<style>[hidden]{display:none!important} body{margin:0} img{max-width:100%} :root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}</style>
+</head>
+<body>
+<title>Jerome's PG Logbook</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bodoni+Moda:opsz,wght@6..96,500;6..96,700&family=Work+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one working column — title, filters, totals, a full-bleed track map, tabbed views; style picker at the foot.
+   Default look is monochrome (paper white / ink black); data colour comes from the chosen colormap, set from script as --accent / --hl. */
+:root {
+  --bg: #ffffff; --surface: #ffffff; --sunk: #f3f3f3; --ink: #0b0b0b; --muted: #6e6e6e; --line: #e3e3e3; --land: #ececec;
+  --accent: #0b0b0b; --hl: #8a8a8a;
+  --font-display: "Bodoni Moda", "Didot", "Bodoni 72", Georgia, serif;
+  --font-body: "Work Sans", "Helvetica Neue", Arial, sans-serif;
+  --font-data: "JetBrains Mono", ui-monospace, Menlo, monospace;
+  --radius: 0px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --bg: #000000; --surface: #070707; --sunk: #101010; --ink: #f1f1f1; --muted: #8d8d8d; --line: #232323; --land: #161616; --accent: #f1f1f1; --hl: #7d7d7d; color-scheme: dark; }
+}
+:root[data-theme="dark"] { --bg: #000000; --surface: #070707; --sunk: #101010; --ink: #f1f1f1; --muted: #8d8d8d; --line: #232323; --land: #161616; --accent: #f1f1f1; --hl: #7d7d7d; color-scheme: dark; }
+/* "Sky" — the first version's look */
+:root[data-style="sky"] { --bg: #eef2f5; --surface: #ffffff; --sunk: #f5f8fa; --ink: #142230; --muted: #5b6b79; --line: #d6dee5; --land: #e1e8ee;
+  --font-display: "Bricolage Grotesque", "Avenir Next", sans-serif; --font-body: "IBM Plex Sans", "Segoe UI", sans-serif; --font-data: "IBM Plex Mono", ui-monospace, monospace; --radius: 10px; }
+@media (prefers-color-scheme: dark) {
+  :root[data-style="sky"]:not([data-theme="light"]) { --bg: #0e141a; --surface: #161f28; --sunk: #121a22; --ink: #e6edf3; --muted: #97a6b4; --line: #26323e; --land: #1b2631; }
+}
+:root[data-style="sky"][data-theme="dark"] { --bg: #0e141a; --surface: #161f28; --sunk: #121a22; --ink: #e6edf3; --muted: #97a6b4; --line: #26323e; --land: #1b2631; }
+
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font: 15px/1.55 var(--font-body); }
+.wrap { max-width: 1200px; margin: 0 auto; padding-inline: 20px; padding-block: 28px 40px; display: grid; gap: 22px; }
+h1, h2, h3 { font-family: var(--font-display); margin: 0; text-wrap: balance; line-height: 1.1; font-weight: 500; }
+h1 { font-size: clamp(2.2rem, 6vw, 4rem); letter-spacing: -0.02em; }
+h1 em { font-style: italic; }
+h2 { font-size: 1.25rem; }
+.num, td.n, .tile b, .mono { font-family: var(--font-data); font-variant-numeric: tabular-nums; }
+.eyebrow { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.16em; color: var(--muted); font-weight: 500; }
+.muted { color: var(--muted); }
+a { color: inherit; }
+
+header.top { display: flex; flex-wrap: wrap; gap: 16px 24px; align-items: end; justify-content: space-between; border-bottom: 1px solid var(--ink); padding-bottom: 18px; }
+header.top .title { display: grid; gap: 6px; min-width: 0; }
+.actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+button, .btn, select, input[type="search"], input[type="number"] {
+  font: inherit; font-size: 0.88rem; color: var(--ink); background: var(--surface);
+  border: 1px solid var(--line); border-radius: var(--radius); padding: 7px 12px; min-height: 36px;
+}
+button, .btn { cursor: pointer; display: inline-flex; align-items: center; gap: 6px; position: relative; }
+button:hover, .btn:hover { border-color: var(--ink); }
+button:disabled { opacity: .4; cursor: default; }
+.btn.primary { background: var(--ink); border-color: var(--ink); color: var(--bg); font-weight: 500; }
+:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+.btn input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+
+.status { font-size: 0.85rem; color: var(--muted); min-height: 1.4em; }
+.banner { border: 1px solid var(--line); border-left: 3px solid var(--ink); padding: 10px 14px; font-size: 0.9rem; }
+.drop { border: 1px dashed var(--ink); padding: 18px; text-align: center; font-weight: 500; }
+
+.filters { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; }
+.filters label { display: flex; gap: 8px; align-items: center; font-size: 0.7rem; text-transform: uppercase; letter-spacing: .12em; color: var(--muted); }
+.filters select { max-width: 240px; text-transform: none; letter-spacing: 0; font-size: 0.88rem; }
+
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.tile { padding: 14px 14px 14px 0; display: grid; gap: 2px; align-content: start; min-width: 0; }
+.tile + .tile { padding-left: 14px; border-left: 1px solid var(--line); }
+.tile b { font-size: 1.5rem; font-weight: 400; letter-spacing: -0.02em; }
+.tile small { color: var(--muted); font-size: 0.78rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (max-width: 640px) { .tile + .tile { border-left: 0; padding-left: 0; } .tile { border-bottom: 1px solid var(--line); } }
+
+.mapbox { position: relative; border: 1px solid var(--line); background: var(--bg); }
+#map { display: block; width: 100%; height: clamp(320px, 58vh, 640px); background: var(--sunk); }
+.dmap { width: 100%; height: clamp(260px, 50vh, 420px); border: 1px solid var(--line); background: var(--sunk); position: relative; }
+/* only the no-library fallback canvas fills the box; the map library sizes its own canvases */
+canvas.fallback { display: block; width: 100%; height: 100%; touch-action: none; cursor: grab; }
+canvas.fallback.dragging { cursor: grabbing; }
+.maphead { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; }
+.maphead select { min-height: 30px; padding: 3px 8px; font-size: .8rem; }
+.mapnote, .mapctl { z-index: 1000; }
+.mapnote { background: color-mix(in srgb, var(--bg) 78%, transparent); padding: 6px 10px; }
+/* Leaflet essentials (its stylesheet can't be linked from a CDN here) */
+.leaflet-pane, .leaflet-tile, .leaflet-marker-icon, .leaflet-marker-shadow, .leaflet-tile-container, .leaflet-pane > svg, .leaflet-pane > canvas, .leaflet-zoom-box, .leaflet-image-layer, .leaflet-layer { position: absolute; left: 0; top: 0; }
+.leaflet-container { overflow: hidden; font-family: var(--font-body); font-size: 12px; -webkit-tap-highlight-color: transparent; }
+.leaflet-tile, .leaflet-marker-icon, .leaflet-marker-shadow { user-select: none; -webkit-user-drag: none; }
+.leaflet-container .leaflet-tile-pane img, .leaflet-container img.leaflet-tile, .leaflet-container .leaflet-tile { max-width: none !important; max-height: none !important; width: auto; padding: 0; }
+.leaflet-container img.leaflet-tile { mix-blend-mode: normal; }
+.leaflet-container.leaflet-touch-drag, .leaflet-container.leaflet-touch-zoom { touch-action: none; }
+.leaflet-tile { filter: inherit; visibility: hidden; }
+.leaflet-tile-loaded { visibility: inherit; }
+.leaflet-pane { z-index: 400; } .leaflet-tile-pane { z-index: 200; } .leaflet-overlay-pane { z-index: 400; } .leaflet-marker-pane { z-index: 600; } .leaflet-tooltip-pane { z-index: 650; } .leaflet-popup-pane { z-index: 700; }
+.leaflet-map-pane canvas { z-index: 100; } .leaflet-map-pane svg { z-index: 200; }
+.leaflet-control { position: relative; z-index: 800; pointer-events: auto; float: left; clear: both; }
+.leaflet-top, .leaflet-bottom { position: absolute; z-index: 1000; pointer-events: none; }
+.leaflet-top { top: 0; } .leaflet-right { right: 0; } .leaflet-bottom { bottom: 0; } .leaflet-left { left: 0; }
+.leaflet-right .leaflet-control { float: right; margin-right: 10px; } .leaflet-left .leaflet-control { margin-left: 10px; }
+.leaflet-top .leaflet-control { margin-top: 10px; } .leaflet-bottom .leaflet-control { margin-bottom: 10px; }
+.leaflet-zoom-animated { transform-origin: 0 0; }
+.leaflet-zoom-anim .leaflet-zoom-animated { transition: transform .25s cubic-bezier(0,0,.25,1); }
+.leaflet-zoom-anim .leaflet-tile, .leaflet-pan-anim .leaflet-tile { transition: none; }
+.leaflet-zoom-anim .leaflet-zoom-hide { visibility: hidden; }
+.leaflet-interactive { cursor: pointer; } .leaflet-grab { cursor: grab; } .leaflet-dragging .leaflet-grab { cursor: grabbing; }
+.leaflet-control-attribution { background: color-mix(in srgb, var(--bg) 80%, transparent); margin: 0 !important; padding: 0 6px; color: var(--muted); font-size: 10px; line-height: 1.6; }
+.leaflet-control-attribution a { color: var(--muted); }
+.leaflet-control-scale-line { border: 1.5px solid var(--ink); border-top: 0; padding: 0 5px; font: 10px var(--font-data); background: color-mix(in srgb, var(--bg) 70%, transparent); color: var(--ink); }
+.mapctl { position: absolute; top: 10px; right: 10px; display: grid; gap: 4px; }
+.mapctl button { width: 36px; justify-content: center; padding: 0; background: var(--bg); }
+.mapnote { position: absolute; left: 12px; top: 10px; display: grid; gap: 2px; pointer-events: none; max-width: 60%; }
+.mapnote b { font-family: var(--font-display); font-size: 1.15rem; font-weight: 500; }
+.colorbar { display: flex; align-items: center; gap: 8px; font-size: 0.75rem; color: var(--muted); font-family: var(--font-data); }
+.colorbar i { width: 120px; height: 6px; display: inline-block; border: 1px solid var(--line); }
+
+nav.tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--line); overflow-x: auto; }
+nav.tabs button { border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: transparent; padding: 10px 14px; color: var(--muted); font-weight: 500; white-space: nowrap; text-transform: uppercase; letter-spacing: .12em; font-size: 0.74rem; }
+nav.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--ink); }
+
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 480px), 1fr)); gap: 28px 32px; }
+.panel { display: grid; gap: 10px; min-width: 0; align-content: start; }
+.panel > header { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; border-bottom: 1px solid var(--line); padding-bottom: 6px; }
+.panel .note { font-size: 0.78rem; color: var(--muted); }
+.full { grid-column: 1 / -1; }
+
+h2 .q { font-family: var(--font-display); font-style: italic; font-weight: 400; color: var(--muted); font-size: .92em; margin-left: .35em; }
+.panel > header { align-items: flex-end; }
+.presets { display: flex; flex-wrap: wrap; gap: 6px; }
+.presets button { min-height: 30px; padding: 4px 10px; font-size: .8rem; }
+.presets button[aria-pressed="true"] { border-color: var(--ink); box-shadow: inset 0 0 0 1px var(--ink); }
+.dbx { display: grid; gap: 10px; border: 1px solid var(--ink); padding: 14px 16px; font-size: .9rem; border-radius: var(--radius); }
+.dbx label { display: grid; gap: 4px; font-size: .8rem; color: var(--muted); max-width: 420px; }
+.dbx input[type="text"] { font: inherit; font-family: var(--font-data); font-size: .9rem; color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 7px 10px; min-height: 36px; }
+.dbx code { font-family: var(--font-data); font-size: .8rem; background: var(--sunk); padding: 2px 6px; word-break: break-all; }
+.dbx .actions { display: flex; flex-wrap: wrap; gap: 8px; }
+nav.pages { display: flex; flex-wrap: wrap; gap: 4px 26px; margin-top: -6px; }
+nav.pages button { border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: transparent; padding: 4px 0; min-height: 0; font-family: var(--font-display); font-size: 1.35rem; color: var(--muted); }
+nav.pages button:hover { color: var(--ink); }
+nav.pages button[aria-current="page"] { color: var(--ink); border-bottom-color: var(--ink); }
+.page { display: grid; gap: 22px; }
+#page-explore { gap: 28px 32px; }
+.where { gap: 34px; }
+.where .lede { margin: 0; max-width: 68ch; font-size: 1rem; }
+.where .summary { margin: 0; font-size: .95rem; max-width: 80ch; }
+.defs { display: flex; flex-wrap: wrap; gap: 10px 20px; align-items: center; font-size: .88rem; }
+.defs label, label.check { display: inline-flex; align-items: center; gap: 8px; }
+.defs input[type="number"] { width: 84px; min-height: 34px; padding: 5px 8px; }
+label.check { font-size: .82rem; color: var(--muted); }
+label.check input { accent-color: var(--ink); width: 16px; height: 16px; margin: 0; }
+.months { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 6px; }
+@media (max-width: 700px) { .months { grid-template-columns: repeat(6, minmax(0, 1fr)); } }
+.months button { flex-direction: column; align-items: stretch; justify-content: flex-end; gap: 6px; padding: 8px 6px; min-height: 92px; font-size: .78rem; }
+.months .mb { height: 44px; display: flex; flex-direction: column; justify-content: flex-end; }
+.months .mb i { display: block; width: 100%; }
+.months .mn { display: flex; justify-content: space-between; gap: 4px; }
+.months .mn small { font-family: var(--font-data); color: var(--muted); font-size: .7rem; }
+.months button[aria-pressed="true"] { border-color: var(--ink); box-shadow: inset 0 0 0 1px var(--ink); }
+.months button.near { border-style: dashed; border-color: var(--ink); }
+.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 250px), 1fr)); gap: 12px; }
+.scard { display: grid; gap: 7px; text-align: left; align-content: start; justify-items: stretch; padding: 14px; background: var(--surface); }
+.scard:hover { border-color: var(--ink); }
+.scard .sname { font-family: var(--font-display); font-size: 1.3rem; font-weight: 500; line-height: 1.15; }
+.scard .big { font-family: var(--font-data); font-size: .95rem; }
+.meter { height: 6px; background: var(--sunk); display: block; }
+.meter i { display: block; height: 100%; }
+.scard dl, .kv { display: grid; grid-template-columns: auto 1fr; gap: 3px 12px; margin: 0; font-size: .8rem; }
+.scard dt, .kv dt { color: var(--muted); }
+.scard dd, .kv dd { white-space: nowrap; margin: 0; text-align: right; font-family: var(--font-data); font-variant-numeric: tabular-nums; }
+.scard small { color: var(--muted); font-size: .74rem; }
+.ev { font-size: .64rem; text-transform: uppercase; letter-spacing: .12em; border: 1px solid var(--line); padding: 1px 6px; justify-self: start; color: var(--muted); }
+.ev.strong { border-color: var(--ink); color: var(--ink); }
+.statrow { display: flex; flex-wrap: wrap; gap: 10px 32px; }
+.statrow div { display: grid; gap: 1px; }
+.statrow b { font-family: var(--font-data); font-size: 1.25rem; font-weight: 400; }
+.statrow small { color: var(--muted); font-size: .76rem; }
+.siteprof { border: 1px solid var(--ink); padding: 18px; gap: 18px; }
+.siteprof > header { border-bottom: 0; align-items: start; }
+.siteprof > header .t { display: grid; gap: 4px; }
+.siteprof > header h2 { font-size: clamp(1.6rem, 4vw, 2.3rem); }
+.chart .row:hover .rowlab { text-decoration: underline; }
+.chart .rowlab, .chart .collab, .chart .cellhit { cursor: pointer; }
+.chart .collab.on { fill: var(--ink); font-weight: 600; }
+#cellList:empty { display: none; }
+#cellList { display: grid; gap: 8px; }
+
+.dive { border-top: 1px solid var(--ink); padding-top: 18px; margin-top: 8px; }
+.dive > header { border-bottom: 0; }
+.chart .sdot { cursor: pointer; }
+.chart .sdot:hover { r: 6; fill-opacity: 1; }
+.chart .med { stroke: var(--ink); stroke-width: 2.5; }
+.chart .medline { stroke: var(--ink); stroke-width: 1; fill: none; stroke-dasharray: 3 3; }
+.chart { width: 100%; overflow-x: auto; }
+.chart svg { display: block; width: 100%; height: auto; overflow: visible; }
+.chart text { font-family: var(--font-data); font-size: 11px; fill: var(--muted); }
+.chart .grid { stroke: var(--line); stroke-width: 1; }
+.chart .hit { fill: transparent; cursor: pointer; }
+.chart .bar { fill: var(--accent); pointer-events: none; }
+.chart .hit:hover + .bar { opacity: .55; }
+.chart .bar.on { stroke: var(--ink); stroke-width: 2; }
+.chart .dot { stroke-width: 1; cursor: pointer; transition: r .12s; }
+.chart .dot:hover { r: 8.5; fill-opacity: .85; }
+.chart .cell { stroke: var(--bg); stroke-width: 2; }
+.chart .tick { stroke-width: 1.5; }
+.chart .lane:hover .lanebg { fill: var(--sunk); }
+.chart .lanebg { fill: transparent; cursor: pointer; }
+.yearkey { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 0.75rem; color: var(--muted); font-family: var(--font-data); }
+.yearkey span { display: inline-flex; align-items: center; gap: 5px; }
+.yearkey .grad { width: 120px; height: 8px; display: inline-block; border: 1px solid var(--line); }
+.yearkey .sz { display: inline-flex; align-items: center; gap: 4px; }
+.yearkey .sz b { display: inline-block; border-radius: 50%; border: 1px solid var(--muted); }
+.yearkey i { width: 11px; height: 11px; border-radius: 50%; border: 1px solid; display: inline-block; }
+
+.tablewrap { overflow-x: auto; border-top: 1px solid var(--ink); }
+table { border-collapse: collapse; width: 100%; font-size: 0.88rem; }
+th, td { text-align: left; padding: 9px 12px 9px 0; border-bottom: 1px solid var(--line); white-space: nowrap; }
+th { font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.14em; color: var(--muted); font-weight: 500; background: var(--bg); position: sticky; top: 0; }
+th.sortable { cursor: pointer; user-select: none; }
+th.sortable[data-dir]::after { content: attr(data-dir); margin-left: 4px; color: var(--ink); }
+td.n, th.n { text-align: right; }
+tbody tr { cursor: pointer; }
+tbody tr:hover td { background: var(--sunk); }
+td .site { white-space: normal; min-width: 160px; display: inline-block; }
+.badge { font-size: 0.66rem; text-transform: uppercase; letter-spacing: .12em; border: 1px solid var(--line); padding: 1px 6px; margin-left: 6px; color: var(--muted); }
+
+.records { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 28px 32px; }
+.records ol { list-style: none; margin: 0; padding: 0; display: grid; }
+.records li { display: grid; grid-template-columns: 22px 1fr auto; gap: 10px; align-items: baseline; padding: 8px 0; border-bottom: 1px solid var(--line); cursor: pointer; }
+.records li:hover .what { text-decoration: underline; }
+.records li .rk { font-family: var(--font-data); color: var(--muted); font-size: 0.8rem; }
+.records li:first-child .rk, .records li:first-child b { color: var(--ink); font-weight: 600; }
+.records li .what { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.records li .what small { display: block; color: var(--muted); font-size: 0.76rem; }
+.records li b { font-family: var(--font-data); font-weight: 400; }
+
+.toolbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; }
+.toolbar input[type="search"] { min-width: 0; flex: 1 1 220px; max-width: 360px; }
+
+.tip { position: fixed; z-index: 3000; pointer-events: none; background: var(--ink); color: var(--bg); font-size: 0.8rem; padding: 6px 9px; max-width: 260px; line-height: 1.35; border-radius: var(--radius); }
+.tip b { font-family: var(--font-data); font-weight: 500; }
+
+.sheet { position: fixed; inset: 0; z-index: 2000; background: color-mix(in srgb, var(--bg) 70%, transparent); backdrop-filter: blur(3px); display: grid; place-items: start center; overflow-y: auto; padding: max(16px, env(safe-area-inset-top, 0px)) 16px 32px; }
+.sheet .card { background: var(--bg); width: min(1040px, 100%); padding: 22px; display: grid; gap: 18px; margin-block: 16px; border: 1px solid var(--ink); border-radius: var(--radius); }
+.sheet .head { display: flex; justify-content: space-between; gap: 12px; align-items: start; flex-wrap: wrap; }
+.sheet .head .t { display: grid; gap: 6px; min-width: 0; }
+.statgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); border-top: 1px solid var(--line); }
+.statgrid div { padding: 10px 12px 10px 0; display: grid; gap: 2px; border-bottom: 1px solid var(--line); }
+.statgrid b { font-family: var(--font-data); font-weight: 400; font-size: 1.05rem; }
+#dAlt { touch-action: none; cursor: crosshair; }
+.readout { font-family: var(--font-data); font-size: .8rem; color: var(--muted); display: flex; flex-wrap: wrap; gap: 4px 14px; min-height: 1.5em; }
+.readout b { color: var(--ink); font-weight: 500; }
+#dAlt { display: block; width: 100%; background: var(--bg); border: 1px solid var(--line); }
+.confirm { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: 0.88rem; }
+
+footer.styles { border-top: 1px solid var(--ink); padding-top: 16px; display: grid; gap: 10px; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chips button { flex-direction: column; align-items: stretch; gap: 6px; padding: 8px 10px; min-width: 104px; font-size: 0.8rem; }
+.chips button i { height: 8px; display: block; border: 1px solid var(--line); }
+.chips button[aria-pressed="true"] { border-color: var(--ink); box-shadow: inset 0 0 0 1px var(--ink); }
+@media (prefers-reduced-motion: no-preference) { button { transition: border-color .15s; } }
+</style>
+
+<div class="wrap" id="app">
+  <header class="top">
+    <div class="title">
+      <span class="eyebrow">Paragliding logbook · read from IGC tracks</span>
+      <h1>Jerome's PG <em>Logbook</em></h1>
+    </div>
+    <div class="actions">
+      <label class="btn primary" for="pickFolder">Load IGC folder
+        <input id="pickFolder" type="file" webkitdirectory directory multiple>
+      </label>
+      <label class="btn" for="pickFiles">Add files
+        <input id="pickFiles" type="file" multiple accept=".igc,.IGC,.csv">
+      </label>
+      <button id="dbxBtn" type="button" hidden>Connect Dropbox</button>
+      <span id="clearBox" class="confirm"><button id="clearBtn" type="button">Clear</button></span>
+    </div>
+  </header>
+
+  <nav class="pages" aria-label="Pages">
+    <button type="button" data-page="dash" aria-current="page">Dashboard</button>
+    <button type="button" data-page="explore">Explore</button>
+    <button type="button" data-page="where">Where &amp; when</button>
+  </nav>
+
+  <div id="status" class="status" role="status">Everything is read in your browser. Nothing is uploaded.</div>
+  <div id="dbxBox" hidden></div>
+  <div id="sampleBanner" class="banner" hidden>These are example flights. Load your IGC folder (renamed or original XContest/Leonardo files, plus any XContest CSVs) to replace them with yours, or drag the folder onto this page.</div>
+  <div id="dropHint" class="drop" hidden>Drop IGC files, CSVs or a whole folder</div>
+
+  <div class="filters">
+    <label for="fYear">Year <select id="fYear"></select></label>
+    <label for="fSite">Site <select id="fSite"></select></label>
+    <label for="fGlider">Glider <select id="fGlider"></select></label>
+    <button id="fReset" type="button" hidden>Show all flights</button>
+  </div>
+
+  <div id="page-dash" class="page">
+  <section class="tiles" id="tiles" aria-label="Totals"></section>
+
+  <section class="panel">
+    <header><h2>Every track</h2><span class="maphead"><label for="baseSel" class="colorbar">Background <select id="baseSel"></select></label><label for="modeSel" class="colorbar">Show <select id="modeSel"><option value="tracks">Tracks</option><option value="heat">Heatmap</option><option value="both">Tracks + heatmap</option></select></label><span class="colorbar"><span id="cbLabel">max alt</span> <span id="cbLo"></span><i id="cbBar"></i><span id="cbHi"></span></span></span></header>
+    <div class="mapbox">
+      <div id="map" aria-label="Map of all flight tracks"></div>
+      <div class="mapnote"><span class="eyebrow" id="mapEyebrow"></span><b id="mapTitle"></b></div>
+      <div class="mapctl"><button id="mIn" type="button" aria-label="Zoom in">+</button><button id="mOut" type="button" aria-label="Zoom out">−</button><button id="mFit" type="button" aria-label="Fit all tracks" style="font-size:.7rem">FIT</button></div>
+    </div>
+    <span class="note" id="mapHelp">Drag to pan, scroll or use + and − to zoom. Click a site circle to fly there, click a track to open the flight. Tracks are coloured by each flight's maximum altitude.</span>
+  </section>
+
+  <nav class="tabs" role="tablist">
+    <button role="tab" id="tab-overview" aria-selected="true" data-tab="overview">Overview</button>
+    <button role="tab" id="tab-gliders" aria-selected="false" data-tab="gliders">Gliders</button>
+    <button role="tab" id="tab-sites" aria-selected="false" data-tab="sites">Sites</button>
+    <button role="tab" id="tab-records" aria-selected="false" data-tab="records">Records</button>
+    <button role="tab" id="tab-flights" aria-selected="false" data-tab="flights">All flights</button>
+  </nav>
+
+  <section id="view-overview" class="grid2">
+    <div class="panel"><header><h2>Airtime by year</h2><span class="note">hours · click a bar to filter</span></header><div class="chart" id="cYears"></div></div>
+    <div class="panel"><header><h2>Season calendar</h2><span class="note">airtime per month</span></header><div class="chart" id="cCal"></div></div>
+    <div class="panel"><header><h2>When you launch</h2><span class="note">local takeoff time · flights</span></header><div class="chart" id="cHour"></div></div>
+    <div class="panel"><header><h2>How long you stay up</h2><span class="note">flights by airtime</span></header><div class="chart" id="cDur"></div></div>
+    <div class="panel full"><header><h2 id="scTitle">Airtime against XC distance</h2><span class="maphead"><label for="scX" class="colorbar">X <select id="scX"></select></label><label for="scY" class="colorbar">Y <select id="scY"></select></label><label for="scColor" class="colorbar">Colour <select id="scColor"></select></label><label for="scSize" class="colorbar">Size <select id="scSize"></select></label></span></header><span class="note" id="scNote">XC distance where XContest scored it, otherwise furthest point from launch · click a dot to open the flight</span><div class="chart" id="cScatter"></div><div class="yearkey" id="yearKey"></div></div>
+    <div class="panel full"><header><h2>Top sites by airtime</h2><span class="note">click a bar to filter to that site</span></header><div class="chart" id="cSites"></div></div>
+  </section>
+
+  <section id="view-gliders" hidden style="display:grid;gap:24px">
+    <div class="panel"><header><h2>Glider timeline</h2><span class="note">one tick per flight, taller = longer · click a glider to filter everything to it</span></header><div class="chart" id="cLanes"></div></div>
+    <div class="tablewrap"><table id="tGliders"></table></div>
+  </section>
+
+  <section id="view-sites" hidden>
+    <div class="tablewrap"><table id="tSites"></table></div>
+  </section>
+
+  <section id="view-records" hidden>
+    <div class="records" id="records"></div>
+  </section>
+
+  <section id="view-flights" hidden style="display:grid;gap:12px">
+    <div class="toolbar">
+      <input id="q" type="search" placeholder="Search site, glider or date">
+      <span class="muted" id="flightCount"></span>
+    </div>
+    <div class="tablewrap"><table id="tFlights"></table></div>
+  </section>
+
+  </div>
+
+  <div id="page-explore" class="page grid2" hidden>
+    <div class="panel full dive"><header><h2>Explore a parameter over time</h2><label for="diveSel" class="colorbar">Parameter <select id="diveSel"></select></label></header><span class="note" id="xNote"></span></div>
+    <div class="panel"><header><h2>Distribution</h2><span class="note" id="xHistNote"></span></header><div class="chart" id="cXHist"></div></div>
+    <div class="panel"><header><h2>Progression by year</h2><span class="note">each dot a flight · click a dot to open it</span></header><div class="chart" id="cXYear"></div></div>
+    <div class="panel"><header><h2>Through the season</h2><span class="note">average by month</span></header><div class="chart" id="cXMonth"></div></div>
+    <div class="panel"><header><h2>Personal best over time</h2><span class="note">each step is a new record · click a point to open it</span></header><div class="chart" id="cXRec"></div></div>
+    <div class="panel full"><header><h2>By site</h2><span class="note">average per site with 3 or more flights · best flight in the tooltip</span></header><div class="chart" id="cXSite"></div></div>
+  </div>
+
+  <div id="page-where" class="page where" hidden>
+    <div class="panel full intro">
+      <header><h2>Where &amp; when</h2></header>
+      <p class="lede">What your own flying says about where to go, and when. It's built from the days you flew, so it shows what those days delivered, not how often a place is flyable. Use it to pick candidates, then check the weather records.</p>
+      <div class="defs">
+        <label for="gMeasure">A good flight is <select id="gMeasure"><option value="airtime">airtime of at least</option><option value="xcKm">XC distance of at least</option><option value="gain">height gained of at least</option></select></label>
+        <label for="gValue"><input id="gValue" type="number" min="0" step="any"> <span id="gUnit">min</span></label>
+        <label for="bValue">A bomb-out is shorter than <input id="bValue" type="number" min="1" step="1"> min</label>
+        <label for="incTandem" class="check"><input id="incTandem" type="checkbox"> Include tandem flights</label>
+      </div>
+    </div>
+
+    <div class="panel full">
+      <header><h2>Pick months <span class="q">Where should I go at this time of year?</span></h2></header>
+      <div class="presets" id="monthPresets" role="group" aria-label="Month presets"></div>
+      <div class="months" id="monthChips" role="group" aria-label="Months"></div>
+      <p class="summary" id="monthSummary"></p>
+      <div class="cards" id="siteCards"></div>
+    </div>
+
+    <div class="panel full big"><header><h2>Reliability against upside <span class="q">Which sites deliver reliably, and which deliver big?</span></h2></header><span class="note">Sites with 3 or more flights in the months you picked. Further right, more of your flights there were good. Higher up, your best quarter of flights there went further. Bubble size is the number of flights; the dashed lines are your overall averages.</span><div class="chart" id="cRel"></div></div>
+
+    <div class="panel full">
+      <header><h2>Site calendar <span class="q">When has each site worked for me?</span></h2><span class="maphead"><label for="calMetric" class="colorbar">Show <select id="calMetric"><option value="air">Airtime</option><option value="flights">Flights</option><option value="good">Good flights</option><option value="rate">Good-flight rate</option><option value="median">Median airtime</option><option value="best">Best flight</option></select></label></span></header>
+      <span class="note">Sites with 2 or more flights, ranked by what the squares show. Click a square to list those flights, a site name to open its profile, or a month to add it to your selection.</span>
+      <div class="chart" id="cSiteCal"></div>
+      <div id="cellList"></div>
+    </div>
+
+
+    <div class="panel full siteprof" id="siteProfile" hidden>
+      <header><div class="t"><span class="eyebrow" id="spEyebrow"></span><h2 id="spTitle"></h2></div><span class="actions"><button id="spDash" type="button">Show on dashboard</button><button id="spClose" type="button">Close</button></span></header>
+      <div class="statrow" id="spStats"></div>
+      <div class="grid2">
+        <div class="panel"><header><h2>Months <span class="q">When does this site work?</span></h2><span class="note">flights per month · darker = higher good-flight rate</span></header><div class="chart" id="cSpMonths"></div></div>
+        <div class="panel"><header><h2>When to launch here <span class="q">When should I be in the air here?</span></h2><span class="note">takeoff time against airtime · filled = good flight</span></header><div class="chart" id="cSpHour"></div></div>
+      </div>
+      <div class="panel"><header><h2>Best days here <span class="q">What did my best days here look like?</span></h2><span class="note">click a row to open the flight</span></header><div class="tablewrap"><table id="tSpBest"></table></div></div>
+    </div>
+
+    <div class="grid2">
+      <div class="panel"><header><h2>Which days you fly <span class="q">Am I only flying on weekends?</span></h2><span class="note">flying days by weekday</span></header><div class="chart" id="cDow"></div></div>
+      <div class="panel"><header><h2>When good flights launch <span class="q">What time should I be ready on launch?</span></h2><span class="note">flights by local takeoff hour · darker = more of them good</span></header><div class="chart" id="cGoodHour"></div></div>
+    </div>
+
+    <div class="panel full"><header><h2>Your flying rhythm <span class="q">How often, and how regularly, do I get out?</span></h2><label for="qualSel" class="colorbar">Quality shows <select id="qualSel"><option value="good">Good flights</option><option value="rate">Good-flight rate</option><option value="air">Airtime</option><option value="best">Best flight</option></select></label></header><div class="statrow" id="rhythmStats"></div>
+      <div class="grid2">
+        <div class="panel"><header><h2>Quantity</h2><span class="note">flying days per month</span></header><div class="chart" id="cRhythm"></div></div>
+        <div class="panel"><header><h2>Quality</h2><span class="note" id="qualNote">good flights per month</span></header><div class="chart" id="cQuality"></div></div>
+      </div></div>
+
+    <div class="panel full"><header><h2>Trips away <span class="q">Do trips pay off compared with flying at home?</span></h2></header><span class="note">Your home area each year is where you flew most that year. A trip is a run of flying days elsewhere, with no more than 4 days between them.</span><div class="statrow" id="tripStats"></div><div class="tablewrap"><table id="tTrips"></table></div></div>
+  </div>
+
+  <footer class="styles">
+    <span class="eyebrow">Style</span>
+    <div class="chips" id="styleChips" role="group" aria-label="Colour style"></div>
+  </footer>
+</div>
+
+<div class="tip" id="tip" hidden></div>
+<div class="sheet" id="sheet" hidden>
+  <div class="card" role="dialog" aria-modal="true" aria-labelledby="dTitle">
+    <div class="head">
+      <div class="t"><span class="eyebrow" id="dEyebrow"></span><h2 id="dTitle" style="font-size:clamp(1.6rem,4vw,2.4rem)"></h2><span class="muted" id="dSub"></span></div>
+      <div class="actions"><span id="delBox" class="confirm"></span><button id="dPrev" type="button">← Earlier</button><button id="dNext" type="button">Later →</button><button id="dClose" type="button">Close</button></div>
+    </div>
+    <div class="statgrid" id="dStats"></div>
+    <div class="grid2">
+      <div class="panel"><header><h2>Track</h2><span class="note" id="dTrackNote"></span></header><div id="dTrack" class="dmap"></div><span class="note" id="dMapNote">○ launch · ■ landing · shaded by altitude</span></div>
+      <div class="panel"><header><h2>Altitude</h2><span class="note">metres over the flight</span></header><canvas id="dAlt" height="400"></canvas><div class="readout" id="dReadout">Move along the altitude chart or the track to follow the glider.</div></div>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+"use strict";
+const $ = (s) => document.querySelector(s);
+const state = { flights: [], csvRows: [], sample: false, tab: "overview", year: "all", site: "all", glider: "all", sort: { key: "epoch", dir: -1 }, q: "", open: null, openList: [], list: [], style: "mono", deleted: [] };
+
+/* ---------- formatting ---------- */
+const fmtH = (s) => { const m = Math.round(s / 60); return `${Math.floor(m / 60)}:${String(m % 60).padStart(2, "0")}`; };
+const fmtHours = (s) => (s / 3600 >= 100 ? Math.round(s / 3600).toLocaleString() : (s / 3600).toFixed(1));
+const fmtKm = (k) => (k >= 100 ? Math.round(k).toLocaleString() : k.toFixed(1));
+const fmtM = (m) => Math.round(m).toLocaleString();
+const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+const DOW = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const prettyDate = (d) => { const [y, m, dd] = d.split("-"); return `${+dd} ${MONTHS[+m - 1]} ${y}`; };
+
+/* ---------- geometry ---------- */
+const R = 6371;
+function dist(a1, o1, a2, o2) {
+  const r = Math.PI / 180, dA = (a2 - a1) * r, dO = (o2 - o1) * r;
+  const h = Math.sin(dA / 2) ** 2 + Math.cos(a1 * r) * Math.cos(a2 * r) * Math.sin(dO / 2) ** 2;
+  return 2 * R * Math.asin(Math.min(1, Math.sqrt(h)));
+}
+
+/* ---------- IGC parsing ---------- */
+function parseIGC(text) {
+  let date = null, glider = "", fixes = [], dayOff = 0, prevT = -1;
+  for (const line of text.split(/\r?\n/)) {
+    const c = line[0];
+    if (c === "H") {
+      let m = line.match(/^HFDTE(?:DATE:)?(\d{2})(\d{2})(\d{2})/);
+      if (m) date = [2000 + +m[3] < 2080 ? 2000 + +m[3] : 1900 + +m[3], +m[2], +m[1]];
+      m = line.match(/^H[FOP]GTY[^:]*:(.*)$/i);
+      if (m && m[1].trim() && !/^(not?\s*set|unknown|-+)$/i.test(m[1].trim())) glider = m[1].trim();
+    } else if (c === "B" && line.length >= 35) {
+      let t = +line.substr(1, 2) * 3600 + +line.substr(3, 2) * 60 + +line.substr(5, 2);
+      if (prevT >= 0 && t + dayOff < prevT - 3600) dayOff += 86400;
+      t += dayOff; prevT = t;
+      let lat = +line.substr(7, 2) + +line.substr(9, 5) / 60000; if (line[14] === "S") lat = -lat;
+      let lon = +line.substr(15, 3) + +line.substr(18, 5) / 60000; if (line[23] === "W") lon = -lon;
+      const pa = +line.substr(25, 5), ga = +line.substr(30, 5);
+      if (!isFinite(lat) || !isFinite(lon) || (lat === 0 && lon === 0)) continue;
+      fixes.push({ t, lat, lon, pa: isFinite(pa) ? pa : 0, ga: isFinite(ga) ? ga : 0 });
+    }
+  }
+  if (fixes.length < 20 || !date) return null;
+  const usePa = fixes.filter((f) => f.pa !== 0).length > fixes.length * 0.8;
+  for (const f of fixes) f.alt = usePa ? f.pa : f.ga;
+  return { date, glider, fixes };
+}
+
+/* window end index: first j with t[j]-t[i] >= w */
+function winEnd(fx, w) {
+  const out = new Int32Array(fx.length); let j = 0;
+  for (let i = 0; i < fx.length; i++) { if (j < i) j = i; while (j < fx.length - 1 && fx[j].t - fx[i].t < w) j++; out[i] = j; }
+  return out;
+}
+
+function analyze(fx) {
+  const n = fx.length, e20 = winEnd(fx, 20);
+  const mov = new Uint8Array(n);
+  for (let i = 0; i < n; i++) {
+    const j = e20[i], dt = fx[j].t - fx[i].t; if (dt <= 0) continue;
+    const v = dist(fx[i].lat, fx[i].lon, fx[j].lat, fx[j].lon) * 1000 / dt;
+    const vz = Math.abs(fx[j].alt - fx[i].alt) / dt;
+    mov[i] = v > 3.5 || vz > 1.2 ? 1 : 0;
+  }
+  const pre = new Int32Array(n + 1); for (let i = 0; i < n; i++) pre[i + 1] = pre[i] + mov[i];
+  const e60 = winEnd(fx, 60);
+  let to = 0, la = n - 1;
+  for (let i = 0; i < n; i++) { const j = e60[i]; if (mov[i] && (pre[j + 1] - pre[i]) >= 0.8 * (j - i + 1)) { to = i; break; } }
+  for (let i = n - 1; i > to; i--) { let k = i; while (k > 0 && fx[i].t - fx[k].t < 60) k--; if (mov[i] && (pre[i + 1] - pre[k]) >= 0.8 * (i - k + 1)) { la = Math.min(n - 1, e20[i]); break; } }
+  if (la <= to) { to = 0; la = n - 1; }
+  const seg = fx.slice(to, la + 1);
+  let maxAlt = -1e9, minAlt = 1e9, gain = 0, trackKm = 0, maxDist = 0, prevS = seg[0];
+  let maxClimb = 0, maxSink = 0;
+  const L = seg[0];
+  for (let i = 0; i < seg.length; i++) {
+    const f = seg[i];
+    if (f.alt > maxAlt) maxAlt = f.alt; if (f.alt < minAlt) minAlt = f.alt;
+    if (i) { const p = seg[i - 1], d = dist(p.lat, p.lon, f.lat, f.lon), dt = f.t - p.t; if (dt > 0 && d * 1000 / dt < 60) trackKm += d; }
+    const dl = dist(L.lat, L.lon, f.lat, f.lon); if (dl > maxDist) maxDist = dl;
+    if (f.t - prevS.t >= 10) { const d = f.alt - prevS.alt; if (d > 0) gain += d; prevS = f; }
+  }
+  const s20 = winEnd(seg, 20);
+  for (let i = 0; i < seg.length; i++) {
+    const j = s20[i], dt = seg[j].t - seg[i].t; if (dt < 15) continue;
+    const r = (seg[j].alt - seg[i].alt) / dt; if (r < 15 && r > maxClimb) maxClimb = r; if (r > -25 && r < maxSink) maxSink = r;
+  }
+  const last = seg[seg.length - 1];
+  const step = Math.max(1, Math.ceil(seg.length / 360));
+  const track = [];
+  for (let i = 0; i < seg.length; i += step) track.push([+seg[i].lat.toFixed(5), +seg[i].lon.toFixed(5), Math.round(seg[i].alt), seg[i].t - L.t]);
+  if (track[track.length - 1][3] !== last.t - L.t) track.push([+last.lat.toFixed(5), +last.lon.toFixed(5), Math.round(last.alt), last.t - L.t]);
+  return {
+    tOff: L.t, airtime: last.t - L.t, maxAlt, minAlt, launchAlt: L.alt, landAlt: last.alt, gain, maxClimb, maxSink,
+    trackKm, maxDistKm: maxDist, straightKm: dist(L.lat, L.lon, last.lat, last.lon),
+    lat: L.lat, lon: L.lon, landLat: last.lat, landLon: last.lon, track, firstT: fx[0].t, lastT: fx[n - 1].t,
+  };
+}
+
+/* ---------- CSV (XContest export) ---------- */
+function parseCSV(text) {
+  const rows = []; let row = [], cell = "", q = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (q) { if (ch === '"') { if (text[i + 1] === '"') { cell += '"'; i++; } else q = false; } else cell += ch; }
+    else if (ch === '"') q = true;
+    else if (ch === ",") { row.push(cell); cell = ""; }
+    else if (ch === "\n" || ch === "\r") { if (ch === "\r" && text[i + 1] === "\n") i++; row.push(cell); rows.push(row); row = []; cell = ""; }
+    else cell += ch;
+  }
+  if (cell || row.length) { row.push(cell); rows.push(row); }
+  const head = rows.shift() || [];
+  return rows.filter((r) => r.length >= head.length - 1).map((r) => Object.fromEntries(head.map((h, i) => [h.replace(/^﻿/, ""), r[i] ?? ""])));
+}
+function fixName(s) {
+  s = (s || "").trim();
+  try { const b = Uint8Array.from(s, (c) => { const k = c.charCodeAt(0); if (k > 255) throw 0; return k; }); const d = new TextDecoder("utf-8", { fatal: true }).decode(b); s = d; } catch (e) { /* keep as is */ }
+  return /^(\?|unknown)?$/i.test(s) ? "" : s;
+}
+function csvToRows(objs) {
+  return objs.map((o) => {
+    const t = Date.parse(o.pointStart_time); if (!isFinite(t)) return null;
+    return {
+      start: t, offset: +o.utcOffsetStart || 0, launch: fixName(o.takeoff_name) || fixName(o.site_name),
+      country: o.takeoff_countryName || "", glider: (o.glider_nameCompact || "").replace(/\s+/g, " ").trim(),
+      xcType: (o.league_route_type || "").replace(/_/g, " ").toLowerCase(), xcKm: +o.league_route_distance || 0,
+      xcPts: +o.league_route_points || 0, link: o.league_flight_link || "", archive: (o.igc_nameArchive || "").toLowerCase(),
+      tandem: o.glider_subclass === "T",
+    };
+  }).filter(Boolean);
+}
+
+/* ---------- building flights ---------- */
+function fileLaunch(name) {
+  const m = name.match(/^(\d{4})_(\d{2})_(\d{2})_(.+?)(?:_\d+)?\.igc$/i);
+  if (!m) return null;
+  const launch = m[4].replace(/_/g, " ");
+  return { date: `${m[1]}-${m[2]}-${m[3]}`, launch: /^unknown launch$/i.test(launch) ? "" : launch };
+}
+function makeFlight(name, p, a) {
+  const [y, mo, d] = p.date;
+  const day0 = Date.UTC(y, mo - 1, d);
+  const epoch = day0 + a.tOff * 1000;
+  return {
+    id: `${Math.round(epoch / 60000)}_${a.lat.toFixed(3)}_${a.lon.toFixed(3)}`,
+    file: name, epoch, firstEpoch: day0 + a.firstT * 1000, lastEpoch: day0 + a.lastT * 1000,
+    igcGlider: p.glider, fromFile: fileLaunch(name), ...a, track: a.track,
+  };
+}
+function enrich(f) {
+  // match XContest CSV row: by archive file name, else by start time inside the track
+  let row = state.csvRows.find((r) => r.archive && r.archive === f.file.toLowerCase());
+  if (!row) {
+    let best = null, bd = Infinity;
+    for (const r of state.csvRows) {
+      if (r.start < f.firstEpoch - 120000 || r.start > f.lastEpoch) continue;
+      const d = Math.abs(r.start - f.epoch); if (d < bd) { bd = d; best = r; }
+    }
+    if (best && bd < 30 * 60000) row = best;
+  }
+  f.xc = row && row.xcKm ? { type: row.xcType, km: row.xcKm, pts: row.xcPts, link: row.link } : null;
+  f.offset = row ? row.offset : Math.round(f.lon / 15) * 3600;
+  f.offsetGuess = !row;
+  f.glider = (row && row.glider) || f.igcGlider || "";
+  f.country = (row && row.country) || f.country || "";
+  f.tandem = !!(row && row.tandem) || !!f.tandemSample;
+  f.launch = (row && row.launch) || (f.fromFile && f.fromFile.launch) || "";
+  f.launchGuess = false;
+  if (!f.launch) {
+    // no CSV row or renamed file: borrow the name of an earlier flight that took off within 1.5 km
+    let best = null, bd = 1.5;
+    for (const g of state.flights) {
+      if (g === f || !g.launch || g.launchGuess) continue;
+      const d = dist(f.lat, f.lon, g.lat, g.lon); if (d < bd) { bd = d; best = g; }
+    }
+    if (best) { f.launch = best.launch; f.launchGuess = true; }
+  }
+  const local = new Date(f.epoch + f.offset * 1000);
+  f.date = (f.fromFile && f.fromFile.date) || local.toISOString().slice(0, 10);
+  const [y, m, d] = f.date.split("-").map(Number);
+  f.year = y; f.month = m; f.dow = new Date(Date.UTC(y, m - 1, d)).getUTCDay();
+  f.hour = local.getUTCHours() + local.getUTCMinutes() / 60;
+  f.time = `${String(local.getUTCHours()).padStart(2, "0")}:${String(local.getUTCMinutes()).padStart(2, "0")}`;
+  f.xcKm = f.xc ? f.xc.km : f.maxDistKm;
+  return f;
+}
+function siteKey(f) { return f.launch ? f.launch.toLowerCase() : `@${f.lat.toFixed(2)},${f.lon.toFixed(2)}`; }
+function siteLabel(f) {
+  if (f.launch) return f.launch;
+  return `Unnamed spot ${Math.abs(f.lat).toFixed(2)}°${f.lat >= 0 ? "N" : "S"} ${Math.abs(f.lon).toFixed(2)}°${f.lon >= 0 ? "E" : "W"}`;
+}
+
+/* ---------- loading files ---------- */
+const sameFlight = (a, b) => Math.abs(a.epoch - b.epoch) < 5 * 60000 && dist(a.lat, a.lon, b.lat, b.lon) < 0.5;
+/* when two files hold the same flight, keep the richer recording: more track points, then longer airtime */
+const richer = (a, b) => ((b.nFix || 0) > (a.nFix || 0) || ((b.nFix || 0) === (a.nFix || 0) && b.airtime > a.airtime) ? b : a);
+const isDeleted = (f) => state.deleted.some((d) => (typeof d === "string" ? d === f.id : d.id === f.id || sameFlight({ epoch: d.e, lat: d.lat, lon: d.lon }, f)));
+async function loadFiles(files) {
+  files = [...files].filter((f) => /\.(igc|csv)$/i.test(f.name));
+  if (!files.length) { setStatus("No .igc or .csv files found in what you picked."); return; }
+  const csvs = files.filter((f) => /\.csv$/i.test(f.name)), igcs = files.filter((f) => /\.igc$/i.test(f.name));
+  if (state.sample) { state.flights = []; state.sample = false; }
+  for (const c of csvs) { try { state.csvRows.push(...csvToRows(parseCSV(await c.text()))); } catch (e) { /* skip bad csv */ } }
+  const seen = new Set(state.flights.map((f) => f.id));
+  let added = 0, dup = 0, bad = 0, skippedDel = 0;
+  for (let i = 0; i < igcs.length; i++) {
+    if (i % 10 === 0) { setStatus(`Reading flights… ${i} of ${igcs.length}`); await new Promise((r) => setTimeout(r)); }
+    try {
+      const p = parseIGC(await igcs[i].text());
+      if (!p) { bad++; continue; }
+      const f = makeFlight(igcs[i].name, p, analyze(p.fixes));
+      f.nFix = p.fixes.length;
+      if (isDeleted(f)) { skippedDel++; continue; }
+      const twinIdx = seen.has(f.id) ? state.flights.findIndex((g) => g.id === f.id) : state.flights.findIndex((g) => sameFlight(g, f));
+      if (twinIdx >= 0) {
+        dup++;
+        const keep = richer(state.flights[twinIdx], f);
+        if (keep === f) { seen.add(f.id); state.flights[twinIdx] = f; }
+        continue;
+      }
+      seen.add(f.id); state.flights.push(f); added++;
+    } catch (e) { bad++; }
+  }
+  state.flights.forEach(enrich);
+  state.flights.sort((a, b) => a.epoch - b.epoch);
+  save();
+  const parts = [`Loaded ${added} flight${added === 1 ? "" : "s"}`];
+  if (csvs.length) parts.push(`launch names from ${csvs.length} XContest CSV${csvs.length === 1 ? "" : "s"}`);
+  if (dup) parts.push(`${dup} flight${dup === 1 ? "" : "s"} found twice (e.g. on both XContest and Leonardo), kept once`);
+  if (skippedDel) parts.push(`${skippedDel} you deleted earlier left out`);
+  if (bad) parts.push(`${bad} file${bad === 1 ? "" : "s"} without a usable track`);
+  setStatus(parts.join(" · ") + `. ${state.flights.length} flights in your logbook.`);
+  state.year = "all"; state.site = "all"; state.glider = "all";
+  render();
+}
+async function walkEntry(entry, out) {
+  if (entry.isFile) { await new Promise((res) => entry.file((f) => { out.push(f); res(); }, res)); }
+  else if (entry.isDirectory) {
+    const reader = entry.createReader();
+    let batch; do { batch = await new Promise((res) => reader.readEntries(res, () => res([]))); for (const e of batch) await walkEntry(e, out); } while (batch.length);
+  }
+}
+const setStatus = (t) => { $("#status").textContent = t; };
+
+/* ---------- storage (this browser only) ---------- */
+function idb() {
+  return new Promise((res, rej) => { const r = indexedDB.open("lostthermal-logbook", 1); r.onupgradeneeded = () => r.result.createObjectStore("kv"); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
+}
+async function save() {
+  try { const db = await idb(); const tx = db.transaction("kv", "readwrite"); tx.objectStore("kv").put({ flights: state.flights, csvRows: state.csvRows, deleted: state.deleted }, "data"); } catch (e) { /* storage unavailable: fine */ }
+}
+async function restore() {
+  try {
+    const db = await idb();
+    return await new Promise((res) => { const r = db.transaction("kv").objectStore("kv").get("data"); r.onsuccess = () => res(r.result || null); r.onerror = () => res(null); });
+  } catch (e) { return null; }
+}
+async function wipe() { try { const db = await idb(); db.transaction("kv", "readwrite").objectStore("kv").delete("data"); } catch (e) { /* ignore */ } }
+
+/* ---------- example data ---------- */
+function makeSample() {
+  let seed = 42; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  const sites = [
+    { name: "Torrey Pines Gliderport", lat: 32.8903, lon: -117.2517, alt: 100, off: -7, soar: true },
+    { name: "Blossom Valley", lat: 32.8741, lon: -116.8503, alt: 400, off: -7 },
+    { name: "Bassano", lat: 45.8197, lon: 11.7634, alt: 720, off: 2 },
+    { name: "Altes Lager", lat: 51.996, lon: 12.989, alt: 100, off: 2 },
+    { name: "Kössen", lat: 47.6283, lon: 12.4363, alt: 1600, off: 2 },
+  ];
+  const flights = [];
+  for (let k = 0; k < 90; k++) {
+    const s = sites[Math.floor(rnd() * sites.length)];
+    const y = 2021 + Math.floor(rnd() * 5), mo = s.off > 0 ? 4 + Math.floor(rnd() * 5) : 1 + Math.floor(rnd() * 12), d = 1 + Math.floor(rnd() * 27);
+    const dur = s.soar ? 900 + rnd() * 2400 : 600 + rnd() * rnd() * 15000;
+    const startLocal = (s.off > 0 ? 9.5 : 11) + rnd() * 5;
+    const t0 = Math.round((startLocal - s.off) * 3600 + 86400) % 86400;
+    let lat = s.lat, lon = s.lon, alt = s.alt + (s.soar ? 0 : 0), hd = rnd() * 6.28, fixes = [];
+    const xc = !s.soar && dur > 4000 ? 0.6 + rnd() * 0.4 : 0;
+    for (let t = 0; t <= dur; t += 10) {
+      const climbing = !s.soar && Math.sin(t / 420 + k) > 0.2;
+      hd += climbing ? 0.35 : (rnd() - 0.5) * 0.3;
+      const v = climbing ? 9 : 10 + rnd() * 3;
+      lat += (Math.cos(hd) * v * 10 + (xc ? 6 * xc : 0)) / 111000;
+      lon += (Math.sin(hd) * v * 10 + (xc ? 4 * xc : 0)) / (111000 * Math.cos(lat * Math.PI / 180));
+      if (s.soar) { alt = s.alt + 60 + Math.sin(t / 200) * 30 + rnd() * 8; lat = s.lat + Math.sin(t / 300) * 0.012; lon = s.lon + Math.cos(t / 900) * 0.002; }
+      else alt += climbing ? 1.2 + rnd() * 2 : -(0.9 + rnd() * 0.6);
+      if (!s.soar && t > dur - 300) alt -= 6;
+      alt = Math.max(s.soar ? 20 : 200, alt);
+      fixes.push({ t: t0 + t, lat, lon, alt });
+    }
+    const a = analyze(fixes);
+    const f = { id: `ex${k}`, file: "example", epoch: Date.UTC(y, mo - 1, d) + a.tOff * 1000, firstEpoch: 0, lastEpoch: 0, igcGlider: (k % 11 === 5 ? "SKYWALK Join't 3" : y <= 2023 ? "OZONE Mantra M7" : "OZONE Photon"), tandemSample: k % 11 === 5, fromFile: { date: `${y}-${String(mo).padStart(2, "0")}-${String(d).padStart(2, "0")}`, launch: s.name }, ...a };
+    flights.push(enrich(f));
+  }
+  return flights.sort((a, b) => a.epoch - b.epoch);
+}
+
+
+/* ---------- styles & colormaps ---------- */
+const STYLES = [
+  { key: "mono", name: "Monochrome", stops: null },
+  { key: "sky", name: "Sky (original)", stops: ["#0d366b", "#1c5cab", "#3987e5", "#86b6ef", "#cde2fb"] },
+  { key: "rainbow", name: "Rainbow", fixed: true, stops: ["#30123b", "#4662d7", "#36aaf9", "#1ae4b6", "#72fe5e", "#c8ef34", "#faba39", "#f66b19", "#ca2a04", "#7a0403"] },
+  { key: "viridis", name: "Viridis", stops: ["#440154", "#482878", "#3e4989", "#31688e", "#26828e", "#1f9e89", "#35b779", "#6ece58", "#b5de2b", "#fde725"] },
+  { key: "magma", name: "Magma", stops: ["#000004", "#180f3d", "#440f76", "#721f81", "#9e2f7f", "#cd4071", "#f1605d", "#fd9668", "#feca8d", "#fcfdbf"] },
+  { key: "ocean", name: "Ocean", stops: ["#03122b", "#0a3a63", "#0f6b8f", "#1f9bb0", "#62c7c9", "#bfeee6"] },
+  { key: "alpine", name: "Alpine", stops: ["#0f2a1d", "#1f4d36", "#3b7652", "#6e9e6a", "#a9c48a", "#e2dcc0", "#ffffff"] },
+  { key: "plasma", name: "Plasma", stops: ["#0d0887", "#41049d", "#6a00a8", "#8f0da4", "#b12a90", "#cc4778", "#e16462", "#f2844b", "#fca636", "#fcce25", "#f0f921"] },
+  { key: "cividis", name: "Cividis", stops: ["#00224e", "#123570", "#3b496c", "#575d6d", "#707173", "#8a8678", "#a59c74", "#c3b369", "#e1cc55", "#fee838"] },
+  { key: "aurora", name: "Aurora", stops: ["#071a2b", "#0b3d4f", "#0f6e6a", "#2fa37a", "#7fd17a", "#d4f07a"] },
+  { key: "glacier", name: "Glacier", stops: ["#0b1d3a", "#1e4d7a", "#3f7fb3", "#79b1d9", "#bfe0f2", "#f1fafd"] },
+  { key: "ember", name: "Ember", stops: ["#2b0a05", "#6b1508", "#a8320e", "#d9581a", "#f28a2e", "#fbc56b", "#fff1c9"] },
+  { key: "lavender", name: "Lavender", stops: ["#2a1640", "#4f2c73", "#7a4ea3", "#a582c7", "#cdb7e0", "#f1eaf7"] },
+  { key: "desert", name: "Desert", stops: ["#3b2314", "#6e4425", "#a3693a", "#c99a5e", "#e3c890", "#f6ecd2"] },
+  { key: "rose", name: "Rose", stops: ["#2d0a1e", "#5e1a3d", "#943061", "#c95a85", "#e99ab5", "#fbe1ea"] },
+];
+const hexRgb = (h) => [1, 3, 5].map((i) => parseInt(h.substr(i, 2), 16));
+const mix = (a, b, t) => { const x = hexRgb(a), y = hexRgb(b); return rgbHex(x.map((v, i) => v + (y[i] - v) * t)); };
+const rgbHex = (c) => "#" + c.map((v) => Math.round(Math.max(0, Math.min(255, v))).toString(16).padStart(2, "0")).join("");
+function interp(stops, u) {
+  u = Math.max(0, Math.min(1, u)); const x = u * (stops.length - 1), i = Math.min(stops.length - 2, Math.floor(x)), f = x - i;
+  const a = hexRgb(stops[i]), b = hexRgb(stops[i + 1]); return rgbHex(a.map((v, k) => v + (b[k] - v) * f));
+}
+const isDark = () => { const t = document.documentElement.dataset.theme; return t ? t === "dark" : matchMedia("(prefers-color-scheme: dark)").matches; };
+/* cm(t): 0 = least, 1 = most. Always readable against the current background. */
+function cm(t, key = state.style) {
+  const st = STYLES.find((s) => s.key === key) || STYLES[0], dark = isDark();
+  t = Math.max(0, Math.min(1, t));
+  if (!st.stops) return dark ? interp(["#3a3a3a", "#f1f1f1"], t) : interp(["#c9c9c9", "#0b0b0b"], t);
+  if (st.fixed) return interp(st.stops, 0.06 + 0.88 * t);
+  return dark ? interp(st.stops, 0.14 + 0.86 * t) : interp(st.stops, 0.86 - 0.86 * t);
+}
+function applyStyle(key, rerender = true) {
+  state.style = STYLES.some((s) => s.key === key) ? key : "mono";
+  const root = document.documentElement;
+  root.dataset.style = state.style;
+  const mono = state.style === "mono";
+  root.style.setProperty("--accent", mono ? "" : cm(0.78));
+  root.style.setProperty("--hl", mono ? "" : cm(0.42));
+  if (mono) { root.style.removeProperty("--accent"); root.style.removeProperty("--hl"); }
+  try { localStorage.setItem("lt-style", state.style); } catch (e) { /* ignore */ }
+  $("#styleChips").innerHTML = STYLES.map((s) => `<button type="button" data-k="${s.key}" aria-pressed="${s.key === state.style}"><i style="background:linear-gradient(90deg,${[0, .25, .5, .75, 1].map((t) => cm(t, s.key)).join(",")})"></i>${s.name}</button>`).join("");
+  $("#styleChips").querySelectorAll("button").forEach((b) => b.addEventListener("click", () => applyStyle(b.dataset.k)));
+  $("#cbBar").style.background = `linear-gradient(90deg,${[0, .25, .5, .75, 1].map((t) => cm(t)).join(",")})`;
+  if (rerender) { render(); redrawOpen(); }
+}
+
+/* ---------- filtering & grouping ---------- */
+const gliderKey = (f) => (f.glider || "").toLowerCase().replace(/\s+/g, " ").trim() || "~unknown";
+const gliderLabel = (f) => f.glider || "Unknown glider";
+function filtered() {
+  return state.flights.filter((f) => (state.year === "all" || f.year === +state.year) && (state.site === "all" || siteKey(f) === state.site) && (state.glider === "all" || gliderKey(f) === state.glider));
+}
+function groupSites(list) {
+  const m = new Map();
+  for (const f of list) {
+    const k = siteKey(f); let s = m.get(k);
+    if (!s) m.set(k, (s = { key: k, label: siteLabel(f), n: 0, air: 0, best: 0, maxAlt: 0, first: f.date, last: f.date, flights: [], lat: 0, lon: 0 }));
+    s.n++; s.air += f.airtime; s.best = Math.max(s.best, f.xcKm); s.maxAlt = Math.max(s.maxAlt, f.maxAlt); s.flights.push(f); s.lat += f.lat; s.lon += f.lon;
+    if (f.date < s.first) s.first = f.date; if (f.date > s.last) s.last = f.date;
+  }
+  for (const s of m.values()) { s.lat /= s.n; s.lon /= s.n; }
+  return [...m.values()];
+}
+function groupGliders(list) {
+  const m = new Map();
+  for (const f of list) {
+    const k = gliderKey(f); let g = m.get(k);
+    if (!g) m.set(k, (g = { key: k, label: gliderLabel(f), n: 0, air: 0, longest: 0, best: 0, first: f.date, last: f.date, tandem: 0, flights: [], firstEpoch: f.epoch }));
+    g.n++; g.air += f.airtime; g.longest = Math.max(g.longest, f.airtime); g.best = Math.max(g.best, f.xcKm); g.flights.push(f);
+    if (f.tandem) g.tandem++; if (f.date < g.first) g.first = f.date; if (f.date > g.last) g.last = f.date; g.firstEpoch = Math.min(g.firstEpoch, f.epoch);
+  }
+  return [...m.values()];
+}
+
+/* ---------- tooltip ---------- */
+const tip = $("#tip");
+function showTip(html, x, y) { tip.innerHTML = html; tip.hidden = false; const w = tip.offsetWidth; tip.style.left = Math.min(window.innerWidth - w - 8, x + 12) + "px"; tip.style.top = (y + 14) + "px"; }
+const hideTip = () => { tip.hidden = true; };
+function bindTips(root) {
+  root.querySelectorAll("[data-tip]").forEach((el) => {
+    el.addEventListener("mousemove", (e) => showTip(el.dataset.tip, e.clientX, e.clientY));
+    el.addEventListener("mouseleave", hideTip);
+  });
+}
+
+/* ---------- coastlines (fetched once from the jsDelivr npm CDN; grid only if unavailable) ---------- */
+let LAND = null;
+const merc = (lon, lat) => { lat = Math.max(-85, Math.min(85, lat)); return [(lon + 180) / 360, (1 - Math.log(Math.tan(Math.PI / 4 + lat * Math.PI / 360)) / Math.PI) / 2]; };
+const unmercLat = (y) => Math.atan(Math.sinh(Math.PI * (1 - 2 * y))) * 180 / Math.PI;
+function toRings(geo) {
+  const geoms = geo.type === "FeatureCollection" ? geo.features.map((f) => f.geometry) : geo.type === "Feature" ? [geo.geometry] : [geo];
+  const rings = [];
+  for (const g of geoms) {
+    if (!g) continue;
+    const polys = g.type === "Polygon" ? [g.coordinates] : g.type === "MultiPolygon" ? g.coordinates : [];
+    for (const p of polys) for (const r of p) {
+      if (r.length < 4) continue;
+      const a = new Float64Array(r.length * 2); let x0 = 9, x1 = -9, y0 = 9, y1 = -9;
+      r.forEach(([lo, la], i) => { const [x, y] = merc(lo, la); a[2 * i] = x; a[2 * i + 1] = y; if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; });
+      rings.push({ a, x0, x1, y0, y1 });
+    }
+  }
+  return rings.length ? rings : null;
+}
+async function loadLand() {
+  const tries = [
+    async () => { const [tc, topo] = await Promise.all([import("https://cdn.jsdelivr.net/npm/topojson-client@3.1.0/+esm"), import("https://cdn.jsdelivr.net/npm/world-atlas@2.0.2/land-50m.json/+esm")]); const t = topo.default; return tc.feature(t, t.objects.land); },
+    async () => { const [tc, topo] = await Promise.all([import("https://cdn.jsdelivr.net/npm/topojson-client@3.1.0/+esm"), import("https://cdn.jsdelivr.net/npm/world-atlas@2.0.2/land-110m.json/+esm")]); const t = topo.default; return tc.feature(t, t.objects.land); },
+    async () => (await import("https://cdn.jsdelivr.net/npm/@amcharts/amcharts5-geodata@5.1.2/worldLow.js")).default,
+  ];
+  for (const t of tries) { try { const r = toRings(await t()); if (r) { LAND = r; return; } } catch (e) { /* try next source */ } }
+}
+
+/* ---------- map view ---------- */
+const projCache = new WeakMap();
+function proj(f) {
+  let p = projCache.get(f);
+  if (!p) {
+    const a = new Float64Array(f.track.length * 2); let x0 = 9, x1 = -9, y0 = 9, y1 = -9;
+    f.track.forEach((q, i) => { const [x, y] = merc(q[1], q[0]); a[2 * i] = x; a[2 * i + 1] = y; if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; });
+    p = { a, x0, x1, y0, y1 }; projCache.set(f, p);
+  }
+  return p;
+}
+/* ---------- heatmap: where you spent time in the air (track points are evenly spaced in time) ---------- */
+let heatPts = new Float64Array(0);
+function buildHeat(list) {
+  let n = 0; for (const f of list) n += f.track.length;
+  const a = new Float64Array(n * 2); let k = 0;
+  for (const f of list) { const p = proj(f).a; a.set(p, k); k += p.length; }
+  heatPts = a;
+}
+let heatLUT = null, heatLUTKey = "";
+function heatLut() {
+  const key = state.style + isDark();
+  if (key !== heatLUTKey) { heatLUTKey = key; heatLUT = new Uint8Array(256 * 3); for (let i = 0; i < 256; i++) heatLUT.set(hexRgb(cm(0.1 + 0.9 * i / 255)), i * 3); }
+  return heatLUT;
+}
+/* pixel = mercator * sx - (ox, oy) */
+function drawHeat(ctx, w, h, sx, ox, oy) {
+  const D = 2, gw = Math.ceil(w / D), gh = Math.ceil(h / D), grid = new Float32Array(gw * gh), pts = heatPts;
+  for (let i = 0; i < pts.length; i += 2) {
+    const x = (pts[i] * sx - ox) / D, y = (pts[i + 1] * sx - oy) / D;
+    if (x < 0 || y < 0 || x >= gw || y >= gh) continue;
+    grid[(y | 0) * gw + (x | 0)] += 1;
+  }
+  const r = 8, sig = r / 2.2, ker = [];
+  for (let i = -r; i <= r; i++) ker.push(Math.exp(-i * i / (2 * sig * sig)));
+  const tmp = new Float32Array(gw * gh);
+  for (let y = 0; y < gh; y++) for (let x = 0; x < gw; x++) { const v = grid[y * gw + x]; if (!v) continue; for (let i = -r; i <= r; i++) { const xx = x + i; if (xx >= 0 && xx < gw) tmp[y * gw + xx] += v * ker[i + r]; } }
+  grid.fill(0);
+  for (let y = 0; y < gh; y++) for (let x = 0; x < gw; x++) { const v = tmp[y * gw + x]; if (!v) continue; for (let i = -r; i <= r; i++) { const yy = y + i; if (yy >= 0 && yy < gh) grid[yy * gw + x] += v * ker[i + r]; } }
+  let max = 0; for (let i = 0; i < grid.length; i++) if (grid[i] > max) max = grid[i];
+  if (!max) return;
+  const img = new ImageData(gw, gh), d = img.data, LUT = heatLut(), lm = Math.log1p(max);
+  for (let i = 0; i < grid.length; i++) {
+    const v = grid[i]; if (v < max * 0.001) continue;
+    const t = Math.log1p(v) / lm, c = Math.min(255, (t * 255) | 0);
+    d[i * 4] = LUT[c * 3]; d[i * 4 + 1] = LUT[c * 3 + 1]; d[i * 4 + 2] = LUT[c * 3 + 2]; d[i * 4 + 3] = Math.min(225, 30 + t * 230);
+  }
+  const oc = document.createElement("canvas"); oc.width = gw; oc.height = gh; oc.getContext("2d").putImageData(img, 0, 0);
+  ctx.save(); ctx.imageSmoothingEnabled = true; ctx.drawImage(oc, 0, 0, gw * D, gh * D); ctx.restore();
+}
+
+const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+class MapView {
+  constructor(canvas, opts = {}) {
+    this.cv = canvas; this.opts = opts; this.flights = []; this.sites = []; this.cx = 0.5; this.cy = 0.5; this.s = 600; this.hits = []; this.raf = 0;
+    const cv = canvas; let drag = null;
+    cv.addEventListener("pointerdown", (e) => { drag = { x: e.clientX, y: e.clientY, cx: this.cx, cy: this.cy, moved: false }; cv.setPointerCapture(e.pointerId); });
+    cv.addEventListener("pointermove", (e) => {
+      if (drag) {
+        const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+        if (Math.abs(dx) + Math.abs(dy) > 3) { drag.moved = true; cv.classList.add("dragging"); hideTip(); }
+        if (drag.moved) { this.cx = drag.cx - dx / this.s; this.cy = drag.cy - dy / this.s; this.clamp(); this.queue(); }
+        return;
+      }
+      if (this.opts.detail && this.flights[0]) {
+        const r = cv.getBoundingClientRect(), mx = e.clientX - r.left, my = e.clientY - r.top, a = proj(this.flights[0]).a;
+        let best = -1, bd = 900;
+        for (let i = 0; i < a.length / 2; i++) { const [X, Y] = this.P(a[2 * i], a[2 * i + 1]), d = (X - mx) ** 2 + (Y - my) ** 2; if (d < bd) { bd = d; best = i; } }
+        if (best >= 0) setCursor(best);
+        return;
+      }
+      const h = this.hit(e); if (h) { showTip(h.tip, e.clientX, e.clientY); cv.style.cursor = "pointer"; } else { hideTip(); cv.style.cursor = ""; }
+    });
+    cv.addEventListener("pointerup", (e) => { cv.classList.remove("dragging"); const d = drag; drag = null; if (d && !d.moved) { const h = this.hit(e); if (h && this.opts.onSite) { hideTip(); this.opts.onSite(h.site); } } });
+    cv.addEventListener("pointerleave", hideTip);
+    cv.addEventListener("wheel", (e) => { e.preventDefault(); const r = cv.getBoundingClientRect(); this.zoomAt(Math.exp(-e.deltaY * 0.0016), e.clientX - r.left, e.clientY - r.top); }, { passive: false });
+    cv.addEventListener("dblclick", (e) => { const r = cv.getBoundingClientRect(); this.zoomAt(2, e.clientX - r.left, e.clientY - r.top); });
+  }
+  size() { this.w = this.cv.clientWidth || 600; this.h = this.cv.clientHeight || 400; }
+  clamp() {
+    // never zoom out past one copy of the world, and never pan off its edges
+    this.s = Math.max(this.w, this.h, Math.min(2 ** 23, this.s));
+    const hx = this.w / 2 / this.s, hy = this.h / 2 / this.s;
+    this.cx = Math.max(hx, Math.min(1 - hx, this.cx)); this.cy = Math.max(hy, Math.min(1 - hy, this.cy));
+  }
+  zoomAt(k, px, py) {
+    const wx = this.cx + (px - this.w / 2) / this.s, wy = this.cy + (py - this.h / 2) / this.s;
+    this.s *= k; this.clamp(); this.cx = wx - (px - this.w / 2) / this.s; this.cy = wy - (py - this.h / 2) / this.s; this.queue();
+  }
+  fit(flights) {
+    this.size();
+    if (!flights.length) { this.cx = 0.5; this.cy = 0.45; this.s = this.w / 1.2; this.queue(); return; }
+    let x0 = 9, x1 = -9, y0 = 9, y1 = -9;
+    for (const f of flights) { const p = proj(f); x0 = Math.min(x0, p.x0); x1 = Math.max(x1, p.x1); y0 = Math.min(y0, p.y0); y1 = Math.max(y1, p.y1); }
+    const minSpan = 0.00006, bw = Math.max(minSpan, x1 - x0), bh = Math.max(minSpan, y1 - y0);
+    this.cx = (x0 + x1) / 2; this.cy = (y0 + y1) / 2; this.s = Math.min(this.w / bw, this.h / bh) * 0.82; this.clamp(); this.queue();
+  }
+  set(flights, sites) { this.flights = flights; this.sites = sites || []; }
+  zoomBy(k) { this.size(); this.zoomAt(k, this.w / 2, this.h / 2); }
+  setMarker(p) { this.marker = p; this.queue(); }
+  setBase() { /* plain canvas view has no tile background */ }
+  invalidate() { this.queue(); }
+  queue() { if (!this.raf) this.raf = requestAnimationFrame(() => { this.raf = 0; this.draw(); }); }
+  P(x, y) { return [(x - this.cx) * this.s + this.w / 2, (y - this.cy) * this.s + this.h / 2]; }
+  hit(e) { const r = this.cv.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top; return this.hits.find((h) => (x - h.x) ** 2 + (y - h.y) ** 2 <= (h.r + 4) ** 2); }
+  draw() {
+    const cv = this.cv, dpr = window.devicePixelRatio || 1; this.size();
+    cv.width = this.w * dpr; cv.height = this.h * dpr;
+    const ctx = cv.getContext("2d"); ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const { w, h, s } = this, vx0 = this.cx - w / 2 / s, vx1 = this.cx + w / 2 / s, vy0 = this.cy - h / 2 / s, vy1 = this.cy + h / 2 / s;
+    ctx.fillStyle = css("--bg"); ctx.fillRect(0, 0, w, h);
+    // land
+    if (LAND) {
+      ctx.beginPath();
+      for (const r of LAND) {
+        if (r.x1 < vx0 || r.x0 > vx1 || r.y1 < vy0 || r.y0 > vy1) continue;
+        const a = r.a, n = a.length / 2, pxSize = Math.max(r.x1 - r.x0, r.y1 - r.y0) * s;
+        if (pxSize < 1.5) continue;
+        const stp = Math.max(1, Math.floor(n / Math.max(12, pxSize * 3)));
+        ctx.moveTo((a[0] - this.cx) * s + w / 2, (a[1] - this.cy) * s + h / 2);
+        for (let i = stp; i < n; i += stp) ctx.lineTo((a[2 * i] - this.cx) * s + w / 2, (a[2 * i + 1] - this.cy) * s + h / 2);
+        ctx.closePath();
+      }
+      ctx.fillStyle = css("--land"); ctx.fill("evenodd");
+      if (s > 4000) { ctx.strokeStyle = css("--line"); ctx.lineWidth = 0.7; ctx.stroke(); }
+    }
+    // graticule
+    const lonSpan = (vx1 - vx0) * 360, stepsDeg = [30, 15, 10, 5, 2, 1, 0.5, 0.2, 0.1, 0.05, 0.02, 0.01];
+    const gs = stepsDeg.find((d) => lonSpan / d >= 3) || 0.01;
+    ctx.strokeStyle = css("--line"); ctx.lineWidth = 0.5; ctx.globalAlpha = 0.7;
+    ctx.fillStyle = css("--muted"); ctx.font = `10px ${css("--font-data")}`;
+    const lon0 = Math.ceil((vx0 * 360 - 180) / gs) * gs;
+    for (let lo = lon0; lo <= vx1 * 360 - 180; lo += gs) { const [X] = this.P((lo + 180) / 360, 0); ctx.beginPath(); ctx.moveTo(X, 0); ctx.lineTo(X, h); ctx.stroke(); ctx.fillText(`${+lo.toFixed(2)}°`, X + 3, h - 6); }
+    const la0 = unmercLat(Math.min(1, vy1)), la1 = unmercLat(Math.max(0, vy0));
+    for (let la = Math.ceil(la0 / gs) * gs; la <= la1; la += gs) { const [, Y] = this.P(0, merc(0, la)[1]); ctx.beginPath(); ctx.moveTo(0, Y); ctx.lineTo(w, Y); ctx.stroke(); ctx.fillText(`${+la.toFixed(2)}°`, 4, Y - 3); }
+    ctx.globalAlpha = 1;
+    if (!this.opts.detail && state.mapMode !== "tracks") drawHeat(ctx, w, h, s, this.cx * s - w / 2, this.cy * s - h / 2);
+    // tracks, bucketed by altitude
+    const vis = !this.opts.detail && state.mapMode === "heat" ? [] : this.flights.filter((f) => { const p = proj(f); return !(p.x1 < vx0 || p.x0 > vx1 || p.y1 < vy0 || p.y0 > vy1); });
+    let aLo = Infinity, aHi = -Infinity; for (const f of this.flights) { aLo = Math.min(aLo, f.minAlt ?? f.launchAlt); aHi = Math.max(aHi, f.maxAlt); }
+    if (!isFinite(aLo)) { aLo = 0; aHi = 1; }
+    this.aLo = aLo; this.aHi = aHi;
+    const B = 16, paths = Array.from({ length: B }, () => new Path2D());
+    // consecutive segments in the same altitude band join into one continuous line (no beading at the joints)
+    for (const f of vis) {
+      const p = proj(f).a, tr = f.track; let cur = -1;
+      let px = (p[0] - this.cx) * s + w / 2, py = (p[1] - this.cy) * s + h / 2;
+      for (let i = 1; i < tr.length; i++) {
+        const X = (p[2 * i] - this.cx) * s + w / 2, Y = (p[2 * i + 1] - this.cy) * s + h / 2;
+        if (Math.abs(X - px) + Math.abs(Y - py) < 0.6 && i < tr.length - 1) continue;
+        const b = Math.min(B - 1, Math.max(0, Math.floor((tr[i][2] - aLo) / Math.max(1, aHi - aLo) * B)));
+        if (b !== cur) { paths[b].moveTo(px, py); cur = b; }
+        paths[b].lineTo(X, Y); px = X; py = Y;
+      }
+    }
+    ctx.lineCap = "butt"; ctx.lineJoin = "round";
+    ctx.lineWidth = this.opts.detail ? 2.4 : vis.length > 150 ? 1 : 1.4;
+    ctx.globalAlpha = this.opts.detail ? 1 : 0.9;
+    paths.forEach((p, b) => { ctx.strokeStyle = cm(0.15 + 0.85 * (b + 0.5) / B); ctx.stroke(p); });
+    ctx.globalAlpha = 1;
+    // sites as circles when zoomed out; markers in detail mode
+    this.hits = [];
+    if (this.opts.detail && this.flights[0]) {
+      const f = this.flights[0], a = proj(f).a, n = a.length / 2;
+      const [sx, sy] = this.P(a[0], a[1]), [ex, ey] = this.P(a[2 * n - 2], a[2 * n - 1]);
+      ctx.lineWidth = 2; ctx.strokeStyle = css("--ink"); ctx.fillStyle = css("--bg");
+      ctx.beginPath(); ctx.arc(sx, sy, 6, 0, 7); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = css("--ink"); ctx.fillRect(ex - 5, ey - 5, 10, 10);
+    } else {
+      const maxAir = Math.max(1, ...this.sites.map((q) => q.air));
+      const placed = [];
+      const shown = [...this.sites].sort((a, b) => b.air - a.air);
+      for (const site of shown) {
+        let x0 = 9, x1 = -9, y0 = 9, y1 = -9;
+        for (const f of site.flights) { const p = proj(f); x0 = Math.min(x0, p.x0); x1 = Math.max(x1, p.x1); y0 = Math.min(y0, p.y0); y1 = Math.max(y1, p.y1); }
+        const span = Math.max(x1 - x0, y1 - y0) * s;
+        const [X, Y] = this.P((x0 + x1) / 2, (y0 + y1) / 2);
+        if (span > 70 || X < -30 || X > w + 30 || Y < -30 || Y > h + 30) continue;
+        const r = 4 + 18 * Math.sqrt(site.air / maxAir);
+        ctx.beginPath(); ctx.arc(X, Y, r, 0, 7); ctx.globalAlpha = 0.85; ctx.fillStyle = css("--bg"); ctx.fill(); ctx.globalAlpha = 1;
+        ctx.lineWidth = 1.3; ctx.strokeStyle = css("--ink"); ctx.stroke();
+        this.hits.push({ x: X, y: Y, r, site, tip: `${esc(site.label)}<br><b>${site.n}</b> flights · <b>${fmtH(site.air)}</b> h<br>click to zoom in` });
+        const label = site.label.length > 26 ? site.label.slice(0, 25) + "…" : site.label;
+        ctx.font = `11px ${css("--font-body")}`; const tw = ctx.measureText(label).width;
+        const box = [X + r + 4, Y - 7, X + r + 8 + tw, Y + 7];
+        if (!placed.some((b) => !(box[2] < b[0] || box[0] > b[2] || box[3] < b[1] || box[1] > b[3]))) { placed.push(box); ctx.fillStyle = css("--ink"); ctx.fillText(label, X + r + 5, Y + 4); }
+      }
+    }
+    // scale bar
+    const latC = unmercLat(this.cy), kmPerPx = 40075 * Math.cos(latC * Math.PI / 180) / s;
+    const nice = [0.1, 0.2, 0.5, 1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000].find((v) => v / kmPerPx > 70) || 2000;
+    const bl = nice / kmPerPx, by = h - 24;
+    ctx.strokeStyle = css("--ink"); ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(w - 16 - bl, by); ctx.lineTo(w - 16, by); ctx.moveTo(w - 16 - bl, by - 4); ctx.lineTo(w - 16 - bl, by + 4); ctx.moveTo(w - 16, by - 4); ctx.lineTo(w - 16, by + 4); ctx.stroke();
+    ctx.fillStyle = css("--ink"); ctx.font = `10px ${css("--font-data")}`; ctx.textAlign = "right"; ctx.fillText(`${nice} km`, w - 16, by - 7); ctx.textAlign = "left";
+    if (this.opts.detail && this.marker) {
+      const p = this.marker, [mx, my] = merc(p[1], p[0]), [X, Y] = this.P(mx, my);
+      ctx.beginPath(); ctx.arc(X, Y, 8, 0, 7); ctx.fillStyle = cm(0.15 + 0.85 * (p[2] - this.aLo) / Math.max(1, this.aHi - this.aLo)); ctx.fill();
+      ctx.lineWidth = 3; ctx.strokeStyle = css("--ink"); ctx.stroke();
+    }
+    if (this.opts.onDraw) this.opts.onDraw(this);
+  }
+}
+
+/* ---------- real map backgrounds (Leaflet). Inside Claude the tiles are blocked; opened as a file they load. ---------- */
+const BASEMAPS = [
+  ["auto", "Clean light/dark"],
+  ["topo", "Topographic"],
+  ["satellite", "Satellite"],
+  ["streets", "Streets"],
+  ["otm", "OpenTopoMap"],
+];
+const tileHealth = { ok: false, err: 0, warned: false };
+const ESRI = "https://server.arcgisonline.com/ArcGIS/rest/services/";
+const esriAttr = 'Tiles © <a href="https://www.esri.com" target="_blank" rel="noopener">Esri</a>';
+/* returns [main tile layer, optional label overlay]; all of these work without an API key */
+function baseLayers(key) {
+  if (key === "otm") return [L.tileLayer("https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png", { subdomains: "abc", maxZoom: 17, attribution: '© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors, SRTM · style © <a href="https://opentopomap.org" target="_blank" rel="noopener">OpenTopoMap</a> (CC-BY-SA)' })];
+  if (key === "topo") return [L.tileLayer(ESRI + "World_Topo_Map/MapServer/tile/{z}/{y}/{x}", { maxZoom: 19, attribution: `${esriAttr}, HERE, Garmin, USGS, OpenStreetMap contributors and the GIS community` })];
+  if (key === "satellite") return [L.tileLayer(ESRI + "World_Imagery/MapServer/tile/{z}/{y}/{x}", { maxZoom: 19, attribution: `${esriAttr}, Maxar, Earthstar Geographics and the GIS community` })];
+  if (key === "streets") return [L.tileLayer(ESRI + "World_Street_Map/MapServer/tile/{z}/{y}/{x}", { maxZoom: 19, attribution: `${esriAttr}, HERE, Garmin, USGS, OpenStreetMap contributors` })];
+  const shade = isDark() ? "Dark" : "Light";
+  return [
+    L.tileLayer(`${ESRI}Canvas/World_${shade}_Gray_Base/MapServer/tile/{z}/{y}/{x}`, { maxZoom: 16, attribution: `${esriAttr}, HERE, Garmin, OpenStreetMap contributors` }),
+    L.tileLayer(`${ESRI}Canvas/World_${shade}_Gray_Reference/MapServer/tile/{z}/{y}/{x}`, { maxZoom: 16 }),
+  ];
+}
+function checkTiles() {
+  setTimeout(() => {
+    if (tileHealth.ok || tileHealth.warned || !tileHealth.err) return;
+    tileHealth.warned = true;
+    const msg = "Map backgrounds can't load inside Claude, so tracks are shown on a plain background. Open the downloaded PG-Logbook.html file from your computer to see them on topographic, satellite or street maps.";
+    $("#mapHelp").textContent = msg; $("#dMapNote").textContent = "○ launch · ■ landing · map background only loads in the downloaded file";
+  }, 4000);
+}
+const bounds = (flights) => {
+  let a0 = 90, a1 = -90, o0 = 180, o1 = -180;
+  for (const f of flights) for (const p of f.track) { if (p[0] < a0) a0 = p[0]; if (p[0] > a1) a1 = p[0]; if (p[1] < o0) o0 = p[1]; if (p[1] > o1) o1 = p[1]; }
+  return a1 >= a0 ? L.latLngBounds([a0, o0], [a1, o1]) : null;
+};
+const HeatLayer = window.L ? L.Layer.extend({
+  onAdd(map) { this._map = map; this._c = L.DomUtil.create("canvas", "leaflet-zoom-hide"); map.getPane("heat").appendChild(this._c); map.on("moveend zoomend resize viewreset", this._reset, this); this._reset(); },
+  onRemove(map) { L.DomUtil.remove(this._c); map.off("moveend zoomend resize viewreset", this._reset, this); },
+  _reset() {
+    const m = this._map; if (!m) return;
+    const size = m.getSize(), c = this._c;
+    L.DomUtil.setPosition(c, m.containerPointToLayerPoint([0, 0]));
+    c.width = size.x; c.height = size.y; c.style.width = size.x + "px"; c.style.height = size.y + "px";
+    const ctx = c.getContext("2d"); ctx.clearRect(0, 0, size.x, size.y);
+    const o = m.getPixelBounds().min;
+    drawHeat(ctx, size.x, size.y, 256 * Math.pow(2, m.getZoom()), o.x, o.y);
+  },
+}) : null;
+class LeafletView {
+  constructor(el, opts = {}) {
+    this.opts = opts; this.flights = []; this.sites = [];
+    this.map = L.map(el, { preferCanvas: true, zoomControl: false, attributionControl: true, worldCopyJump: true, minZoom: 2 });
+    this.map.attributionControl.setPrefix(false);
+    L.control.scale({ imperial: false, position: "bottomleft" }).addTo(this.map);
+    this.tracks = L.layerGroup().addTo(this.map); this.siteLayer = L.layerGroup().addTo(this.map);
+    if (!opts.detail) { this.map.createPane("heat").style.zIndex = 350; this.heat = new HeatLayer(); }
+    this.setBase();
+    this.map.on("zoomend", () => this.toggleSites());
+    if (opts.detail) this.map.on("mousemove", (e) => {
+      const f = this.flights[0]; if (!f) return;
+      let best = -1, bd = 900;
+      f.track.forEach((p, i) => { const q = this.map.latLngToContainerPoint([p[0], p[1]]), d = (q.x - e.containerPoint.x) ** 2 + (q.y - e.containerPoint.y) ** 2; if (d < bd) { bd = d; best = i; } });
+      if (best >= 0) setCursor(best);
+    });
+    this.map.setView([30, 0], 2);
+  }
+  setBase() {
+    (this.base || []).forEach((l) => this.map.removeLayer(l));
+    this.base = baseLayers(state.basemap);
+    this.base.forEach((l) => l.addTo(this.map));
+    this.base[0].on("tileload", () => { tileHealth.ok = true; });
+    this.base[0].on("tileerror", () => { tileHealth.err++; checkTiles(); });
+  }
+  set(flights, sites) { this.flights = flights; this.sites = sites || []; }
+  setMarker(p) {
+    if (!p) { if (this.gm) { this.map.removeLayer(this.gm); this.gm = null; } return; }
+    const style = { radius: 8, color: css("--ink"), weight: 3, fillColor: cm(0.15 + 0.85 * (p[2] - this.aLo) / Math.max(1, this.aHi - this.aLo)), fillOpacity: 1, interactive: false };
+    if (!this.gm) this.gm = L.circleMarker([p[0], p[1]], style).addTo(this.map); else { this.gm.setLatLng([p[0], p[1]]); this.gm.setStyle(style); }
+    this.gm.bringToFront();
+  }
+  zoomBy(k) { k > 1 ? this.map.zoomIn() : this.map.zoomOut(); }
+  invalidate() { this.map.invalidateSize(); }
+  fit(flights) {
+    this.flights = flights; this.redraw();
+    const b = bounds(flights);
+    if (b) this.map.fitBounds(b, { padding: [36, 36], maxZoom: this.opts.detail ? 15 : 13, animate: false }); else this.map.setView([30, 0], 2);
+  }
+  queue() { this.redraw(); }
+  toggleSites() { const show = this.map.getZoom() < 11; if (show && !this.map.hasLayer(this.siteLayer)) this.siteLayer.addTo(this.map); if (!show && this.map.hasLayer(this.siteLayer)) this.map.removeLayer(this.siteLayer); }
+  redraw() {
+    this.tracks.clearLayers(); this.siteLayer.clearLayers();
+    let aLo = Infinity, aHi = -Infinity; for (const f of this.flights) { aLo = Math.min(aLo, f.minAlt ?? f.launchAlt); aHi = Math.max(aHi, f.maxAlt); }
+    if (!isFinite(aLo)) { aLo = 0; aHi = 1; }
+    this.aLo = aLo; this.aHi = aHi;
+    const ink = css("--ink"), bg = css("--bg");
+    if (this.opts.detail) {
+      const f = this.flights[0]; if (!f) return;
+      if (this.gm) { this.map.removeLayer(this.gm); this.gm = null; }
+      const B = 18, tr = f.track; let run = [[tr[0][0], tr[0][1]]], cur = null;
+      const band = (a) => Math.min(B - 1, Math.max(0, Math.floor((a - aLo) / Math.max(1, aHi - aLo) * B)));
+      const flush = () => { if (run.length > 1) L.polyline(run, { color: cm(0.15 + 0.85 * (cur + 0.5) / B), weight: 3.5, opacity: 1, lineCap: "butt", interactive: false }).addTo(this.tracks); };
+      // halo underneath so the line reads on any background
+      L.polyline(tr.map((p) => [p[0], p[1]]), { color: bg, weight: 6.5, opacity: 0.7, interactive: false }).addTo(this.tracks);
+      for (let i = 1; i < tr.length; i++) {
+        const b = band(tr[i][2]);
+        if (cur === null) cur = b;
+        if (b !== cur) { flush(); run = [[tr[i - 1][0], tr[i - 1][1]]]; cur = b; }
+        run.push([tr[i][0], tr[i][1]]);
+      }
+      flush();
+      const s0 = tr[0], e0 = tr[tr.length - 1];
+      L.circleMarker([s0[0], s0[1]], { radius: 7, color: ink, weight: 2.5, fillColor: bg, fillOpacity: 1, interactive: false }).addTo(this.tracks);
+      L.rectangle(L.latLng(e0[0], e0[1]).toBounds(60), { color: ink, weight: 1, fillColor: ink, fillOpacity: 1, interactive: false }).addTo(this.tracks);
+      return;
+    }
+    const mode = state.mapMode;
+    if (mode === "tracks") { if (this.map.hasLayer(this.heat)) this.map.removeLayer(this.heat); }
+    else if (this.map.hasLayer(this.heat)) this.heat._reset(); else this.heat.addTo(this.map);
+    if (mode === "heat") { if (this.map.hasLayer(this.tracks)) this.map.removeLayer(this.tracks); }
+    else if (!this.map.hasLayer(this.tracks)) this.tracks.addTo(this.map);
+    const many = this.flights.length > 150;
+    for (const f of this.flights) {
+      const t = (f.maxAlt - aLo) / Math.max(1, aHi - aLo);
+      const line = L.polyline(f.track.map((p) => [p[0], p[1]]), { color: cm(0.2 + 0.8 * t), weight: many ? 1.6 : 2.2, opacity: 0.9, smoothFactor: 1.5 });
+      line.on("mouseover", (e) => { line.setStyle({ weight: 4 }); line.bringToFront(); showTip(`${prettyDate(f.date)} · ${esc(siteLabel(f))}<br><b>${fmtH(f.airtime)}</b> h · <b>${fmtKm(f.xcKm)}</b> km · max <b>${fmtM(f.maxAlt)}</b> m`, e.originalEvent.clientX, e.originalEvent.clientY); });
+      line.on("mouseout", () => { line.setStyle({ weight: many ? 1.6 : 2.2 }); hideTip(); });
+      line.on("click", () => { hideTip(); openFlight(f, filtered()); });
+      line.addTo(this.tracks);
+    }
+    const maxAir = Math.max(1, ...this.sites.map((q) => q.air));
+    for (const site of this.sites) {
+      const m = L.circleMarker([site.lat, site.lon], { radius: 5 + 16 * Math.sqrt(site.air / maxAir), color: ink, weight: 1.4, fillColor: bg, fillOpacity: 0.8 });
+      m.on("mouseover", (e) => showTip(`${esc(site.label)}<br><b>${site.n}</b> flights · <b>${fmtH(site.air)}</b> h<br>click to zoom in`, e.originalEvent.clientX, e.originalEvent.clientY));
+      m.on("mouseout", hideTip);
+      m.on("click", () => { hideTip(); const b = bounds(site.flights); if (b) this.map.fitBounds(b, { padding: [36, 36], maxZoom: 14 }); });
+      m.addTo(this.siteLayer);
+    }
+    this.toggleSites();
+  }
+}
+function makeView(el, opts) {
+  if (window.L) return new LeafletView(el, opts);
+  const cv = document.createElement("canvas"); cv.className = "fallback"; el.appendChild(cv);
+  return new MapView(cv, { ...opts, onSite: opts.detail ? null : (site) => mainMap.fit(site.flights) });
+}
+
+/* ---------- SVG charts ---------- */
+function niceMax(v, ticks = 4) {
+  if (v <= 0) return { max: 1, step: 0.25 };
+  const raw = v / ticks, mag = 10 ** Math.floor(Math.log10(raw)), r = raw / mag;
+  const step = (r <= 1 ? 1 : r <= 2 ? 2 : r <= 2.5 ? 2.5 : r <= 5 ? 5 : 10) * mag;
+  return { max: Math.ceil(v / step) * step, step };
+}
+/* each bar takes its own step along the colormap; monochrome keeps solid ink */
+const barColor = (i, n) => (state.style === "mono" ? "var(--accent)" : cm(n < 2 ? 0.8 : 0.22 + 0.78 * (i / (n - 1))));
+const roundTop = (x, y, w, h, base) => { const r = Math.min(3, w / 2, h); return `M${x},${base}V${y + r}Q${x},${y} ${x + r},${y}H${x + w - r}Q${x + w},${y} ${x + w},${y + r}V${base}Z`; };
+function barChart(el, data, { yFmt = (v) => v, onClick, height = 220, labelEvery = 1 } = {}) {
+  const W = 560, H = height, ml = 40, mr = 8, mt = 10, mb = 26, iw = W - ml - mr, ih = H - mt - mb;
+  const { max, step } = niceMax(Math.max(0, ...data.map((d) => d.value)));
+  const bw = iw / Math.max(1, data.length), gap = Math.max(2, Math.min(8, bw * 0.3));
+  let s = `<svg viewBox="0 0 ${W} ${H}" role="img">`;
+  for (let v = 0; v <= max + 1e-9; v += step) { const y = mt + ih - (v / max) * ih; s += `<line class="grid" x1="${ml}" x2="${W - mr}" y1="${y}" y2="${y}"/><text x="${ml - 6}" y="${y + 4}" text-anchor="end">${yFmt(v)}</text>`; }
+  data.forEach((d, i) => {
+    const h = (d.value / max) * ih, x = ml + i * bw + gap / 2, y = mt + ih - h, w = Math.max(1, bw - gap);
+    s += `<rect class="hit" x="${ml + i * bw}" y="${mt}" width="${bw}" height="${ih}" data-tip="${esc(d.tip)}" data-i="${i}"/>`;
+    s += h > 0 ? `<path class="bar${d.on ? " on" : ""}" style="fill:${d.color || barColor(i, data.length)}" d="${roundTop(x, y, w, h, mt + ih)}"/>` : `<g></g>`;
+    if (i % labelEvery === 0) s += `<text x="${x + w / 2}" y="${H - 8}" text-anchor="middle">${esc(d.label)}</text>`;
+  });
+  el.innerHTML = s + `</svg>`;
+  bindTips(el);
+  if (onClick) el.querySelectorAll(".hit").forEach((r) => r.addEventListener("click", () => onClick(data[+r.dataset.i])));
+}
+function hbarChart(el, data, { onClick } = {}) {
+  const W = 760, rowH = 26, ml = 230, mr = 70, H = data.length * rowH + 8;
+  const max = Math.max(1, ...data.map((d) => d.value));
+  let s = `<svg viewBox="0 0 ${W} ${H}" role="img">`;
+  data.forEach((d, i) => {
+    const y = 4 + i * rowH, w = Math.max(2, (d.value / max) * (W - ml - mr));
+    const label = d.label.length > 32 ? d.label.slice(0, 31) + "…" : d.label;
+    s += `<rect class="hit" x="0" y="${y}" width="${W}" height="${rowH}" data-tip="${esc(d.tip)}" data-i="${i}"/>`;
+    s += `<rect class="bar${d.on ? " on" : ""}" style="fill:${barColor(data.length - 1 - i, data.length)}" x="${ml}" y="${y + 6}" width="${w}" height="${rowH - 12}"/>`;
+    s += `<text x="${ml - 10}" y="${y + rowH / 2 + 4}" text-anchor="end" style="font-family:var(--font-body);font-size:12px;fill:var(--ink)">${esc(label)}</text>`;
+    s += `<text x="${ml + w + 8}" y="${y + rowH / 2 + 4}">${esc(d.valueLabel)}</text>`;
+  });
+  el.innerHTML = s + `</svg>`;
+  bindTips(el);
+  if (onClick) el.querySelectorAll(".hit").forEach((r) => r.addEventListener("click", () => onClick(data[+r.dataset.i])));
+}
+function calendar(el, list) {
+  const years = [...new Set(list.map((f) => f.year))].sort();
+  if (!years.length) { el.innerHTML = `<p class="muted">No flights.</p>`; return; }
+  const cell = {}; for (const f of list) { const k = `${f.year}-${f.month}`; (cell[k] ||= { s: 0, n: 0 }); cell[k].s += f.airtime; cell[k].n++; }
+  const max = Math.max(...Object.values(cell).map((c) => c.s));
+  const W = 560, ml = 44, mt = 18, cw = (W - ml - 4) / 12, ch = Math.min(26, cw * 0.8), H = mt + years.length * ch + 6;
+  let s = `<svg viewBox="0 0 ${W} ${H}" role="img">`;
+  MONTHS.forEach((m, i) => { s += `<text x="${ml + i * cw + cw / 2}" y="12" text-anchor="middle">${m[0]}</text>`; });
+  years.forEach((y, r) => {
+    s += `<text x="${ml - 8}" y="${mt + r * ch + ch / 2 + 4}" text-anchor="end">${y}</text>`;
+    for (let m = 1; m <= 12; m++) {
+      const c = cell[`${y}-${m}`], x = ml + (m - 1) * cw, yy = mt + r * ch;
+      s += `<rect class="cell" x="${x}" y="${yy}" width="${cw}" height="${ch}" style="fill:${c ? cm(0.12 + 0.88 * Math.sqrt(c.s / max)) : "var(--sunk)"}" data-tip="${esc(`${MONTHS[m - 1]} ${y}<br><b>${c ? fmtH(c.s) : "0:00"}</b> h · ${c ? c.n : 0} flight${c && c.n === 1 ? "" : "s"}`)}"/>`;
+    }
+  });
+  el.innerHTML = s + `</svg>`;
+  bindTips(el);
+}
+/* dot colour and size can each show another flight parameter */
+const DOT_PARAMS = [
+  ["none", "Nothing", null, null],
+  ["maxAlt", "Max altitude", (f) => f.maxAlt, (v) => `${fmtM(v)} m`],
+  ["gain", "Height gained", (f) => f.gain, (v) => `${fmtM(v)} m`],
+  ["maxClimb", "Best climb", (f) => f.maxClimb, (v) => `+${v.toFixed(1)} m/s`],
+  ["launchAlt", "Launch altitude", (f) => f.launchAlt, (v) => `${fmtM(v)} m`],
+  ["speed", "Average speed", (f) => f.trackKm / Math.max(1 / 60, f.airtime / 3600), (v) => `${v.toFixed(0)} km/h`],
+  ["trackKm", "Track length", (f) => f.trackKm, (v) => `${fmtKm(v)} km`],
+  ["hour", "Takeoff time", (f) => f.hour, (v) => `${String(Math.floor(v)).padStart(2, "0")}:${String(Math.round((v % 1) * 60) % 60).padStart(2, "0")}`],
+  ["year", "Year", (f) => f.year, (v) => String(Math.round(v))],
+];
+/* any parameter against any other; colour and size can carry two more */
+const axisParams = () => [...DIVE_PARAMS, ["year", "Year", (f) => f.year, (v) => String(Math.round(v))]];
+function axisTicks(p, vals) {
+  if (p[0] === "year") { const ys = [...new Set(vals.map(Math.round))].sort((a, b) => a - b); return { lo: ys[0] - 0.5, hi: ys[ys.length - 1] + 0.5, ticks: ys }; }
+  const zero = ["airtime", "xcKm", "gain", "trackKm", "maxClimb"].includes(p[0]);
+  const d = niceDomain(zero ? Math.min(0, ...vals) : Math.min(...vals), Math.max(...vals, zero ? 0.001 : -Infinity), 5);
+  const ticks = []; for (let v = d.lo; v <= d.hi + 1e-9; v += d.step) ticks.push(+v.toFixed(6));
+  return { lo: d.lo, hi: d.hi, ticks };
+}
+const tickFmt = (p, v) => (p[0] === "airtime" ? fmtH(v * 3600) : p[0] === "hour" ? hhmm(v) : p[0] === "year" ? String(v) : String(+v.toFixed(1)));
+function scatter(el, list) {
+  const W = 760, H = 320, ml = 50, mr = 26, mt = 16, mb = 38, iw = W - ml - mr, ih = H - mt - mb;
+  const AP = axisParams(), A = (k, d) => AP.find((p) => p[0] === k) || AP.find((p) => p[0] === d);
+  const xP = A(state.scX, "xcKm"), yP = A(state.scY, "airtime");
+  $("#scTitle").textContent = `${yP[1]} against ${xP[1]}`;
+  $("#scNote").textContent = `${[xP, yP].some((p) => p[0] === "xcKm") ? "XC distance where XContest scored it, otherwise furthest point from launch · " : ""}click a dot to open the flight`;
+  if (!list.length) { el.innerHTML = `<p class="muted">No flights.</p>`; $("#yearKey").innerHTML = ""; return; }
+  const xs = list.map(xP[2]), ys = list.map(yP[2]), xd = axisTicks(xP, xs), yd = axisTicks(yP, ys);
+  const jit = (f, p) => (p[0] === "year" ? jitter(f.id) * 0.6 : 0);
+  const X = (v) => ml + ((v - xd.lo) / (xd.hi - xd.lo)) * iw, Y = (v) => mt + ih - ((v - yd.lo) / (yd.hi - yd.lo)) * ih;
+  const P = (k) => DOT_PARAMS.find((p) => p[0] === k) || DOT_PARAMS[0];
+  const cP = P(state.dotColor), sP = P(state.dotSize);
+  const range = (p) => { if (!p[2] || !list.length) return null; const v = list.map(p[2]).filter(isFinite); return { lo: Math.min(...v), hi: Math.max(...v) }; };
+  const cr = range(cP), sr = range(sP), norm = (r, v) => (r && r.hi > r.lo ? (v - r.lo) / (r.hi - r.lo) : 0.6);
+  const plain = state.style === "mono" ? css("--ink") : cm(0.78);
+  const colorOf = (f) => (cr ? cm(0.12 + 0.88 * norm(cr, cP[2](f))) : plain);
+  const sizeOf = (f) => (sr ? 3.5 + 9 * Math.sqrt(norm(sr, sP[2](f))) : 6);
+  let s = `<svg viewBox="0 0 ${W} ${H}" role="img">`;
+  for (const v of yd.ticks) s += `<line class="grid" x1="${ml}" x2="${W - mr}" y1="${Y(v)}" y2="${Y(v)}"/><text x="${ml - 6}" y="${Y(v) + 4}" text-anchor="end">${esc(tickFmt(yP, v))}</text>`;
+  for (const v of xd.ticks) s += `<text x="${X(v)}" y="${H - 20}" text-anchor="middle">${esc(tickFmt(xP, v))}</text>`;
+  s += `<text x="${ml}" y="${H - 3}">${esc(xP[1].toLowerCase())} →</text><text x="4" y="10">${esc(yP[1].toLowerCase())}</text>`;
+  // big dots first so small ones stay visible on top
+  const order = list.map((f, i) => i).sort((a, b) => sizeOf(list[b]) - sizeOf(list[a]));
+  for (const i of order) {
+    const f = list[i], x = X(xs[i] + jit(f, xP)), y = Y(ys[i] + jit(f, yP)), c = colorOf(f);
+    const extra = [xP, yP, cP, sP].filter((p, k, arr) => p[2] && !["airtime", "xcKm"].includes(p[0]) && arr.findIndex((q) => q[0] === p[0]) === k).map((p) => `${p[1]} <b>${p[3](p[2](f))}</b>`).join("<br>");
+    s += `<circle class="dot" cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${sizeOf(f).toFixed(1)}" style="fill:${c};fill-opacity:.62;stroke:${c};stroke-opacity:.95" data-i="${i}" data-tip="${esc(`${prettyDate(f.date)} · ${siteLabel(f)}<br><b>${fmtH(f.airtime)}</b> h · <b>${fmtKm(f.xcKm)}</b> km${extra ? "<br>" + extra : ""}`)}"/>`;
+  }
+  el.innerHTML = s + `</svg>`;
+  bindTips(el);
+  el.querySelectorAll(".dot").forEach((d) => d.addEventListener("click", () => openFlight(list[+d.dataset.i], list)));
+  const key = [];
+  if (cr) key.push(`<span>${cP[1]}: ${cP[3](cr.lo)} <i class="grad" style="background:linear-gradient(90deg,${[0, .25, .5, .75, 1].map((t) => cm(0.12 + 0.88 * t)).join(",")})"></i> ${cP[3](cr.hi)}</span>`);
+  if (sr) key.push(`<span class="sz">${sP[1]}: ${sP[3](sr.lo)} <b style="width:7px;height:7px"></b><b style="width:14px;height:14px"></b><b style="width:24px;height:24px"></b> ${sP[3](sr.hi)}</span>`);
+  $("#yearKey").innerHTML = key.join("");
+}
+
+/* ---------- dive into one parameter ---------- */
+const DIVE_PARAMS = [
+  ["airtime", "Airtime", (f) => f.airtime / 3600, (v) => `${fmtH(v * 3600)} h`],
+  ["xcKm", "XC distance", (f) => f.xcKm, (v) => `${fmtKm(v)} km`],
+  ...DOT_PARAMS.filter((p) => p[2] && p[0] !== "year"),
+];
+const median = (a) => { if (!a.length) return 0; const s = [...a].sort((x, y) => x - y), m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };
+const jitter = (id) => { let x = 0; for (const c of String(id)) x = (x * 31 + c.charCodeAt(0)) >>> 0; return (x % 1000) / 1000 - 0.5; };
+function yScale(vals) {
+  const lo0 = Math.min(0, ...vals), hi0 = Math.max(...vals, 0.001);
+  const { max, step } = niceMax(hi0 - lo0, 4); const lo = Math.floor(lo0 / step) * step;
+  return { lo, hi: lo + Math.ceil((hi0 - lo) / step) * step, step };
+}
+function stripByYear(el, list, P) {
+  const years = [...new Set(list.map((f) => f.year))].sort();
+  if (!years.length) { el.innerHTML = `<p class="muted">No flights.</p>`; return; }
+  const W = 560, H = 240, ml = 52, mr = 8, mt = 10, mb = 26, iw = W - ml - mr, ih = H - mt - mb;
+  const vals = list.map(P[2]), sc = yScale(vals), Y = (v) => mt + ih - ((v - sc.lo) / (sc.hi - sc.lo)) * ih, bw = iw / years.length;
+  let s = `<svg viewBox="0 0 ${W} ${H}" role="img">`;
+  for (let v = sc.lo; v <= sc.hi + 1e-9; v += sc.step) s += `<line class="grid" x1="${ml}" x2="${W - mr}" y1="${Y(v)}" y2="${Y(v)}"/><text x="${ml - 6}" y="${Y(v) + 4}" text-anchor="end">${esc(P[3](v))}</text>`;
+  years.forEach((y, i) => {
+    const cx = ml + bw * (i + 0.5), fl = list.filter((f) => f.year === y), col = barColor(i, years.length);
+    for (const f of fl) {
+      const v = P[2](f);
+      s += `<circle class="sdot" cx="${(cx + jitter(f.id) * bw * 0.55).toFixed(1)}" cy="${Y(v).toFixed(1)}" r="3.6" style="fill:${col};fill-opacity:.55;stroke:${col}" data-id="${esc(f.id)}" data-tip="${esc(`${prettyDate(f.date)} · ${siteLabel(f)}<br>${P[1]} <b>${P[3](v)}</b>`)}"/>`;
+    }
+    s += `<text x="${cx}" y="${H - 8}" text-anchor="middle">${years.length > 8 ? "'" + String(y).slice(2) : y}</text>`;
+  });
+  el.innerHTML = s + `</svg>`;
+  bindTips(el);
+  el.querySelectorAll(".sdot").forEach((d) => d.addEventListener("click", () => openFlight(list.find((f) => f.id === d.dataset.id), list)));
+}
+function recordLine(el, list, P) {
+  const fl = [...list].sort((a, b) => a.epoch - b.epoch);
+  if (!fl.length) { el.innerHTML = `<p class="muted">No flights.</p>`; return; }
+  const W = 560, H = 240, ml = 52, mr = 14, mt = 12, mb = 26, iw = W - ml - mr, ih = H - mt - mb;
+  const t0 = fl[0].epoch, t1 = Math.max(t0 + 864e5, fl[fl.length - 1].epoch), X = (t) => ml + ((t - t0) / (t1 - t0)) * iw;
+  const recs = []; let best = -Infinity;
+  for (const f of fl) { const v = P[2](f); if (v > best) { best = v; recs.push(f); } }
+  const sc = yScale(recs.map(P[2])), Y = (v) => mt + ih - ((v - sc.lo) / (sc.hi - sc.lo)) * ih;
+  let s = `<svg viewBox="0 0 ${W} ${H}" role="img">`;
+  for (let v = sc.lo; v <= sc.hi + 1e-9; v += sc.step) s += `<line class="grid" x1="${ml}" x2="${W - mr}" y1="${Y(v)}" y2="${Y(v)}"/><text x="${ml - 6}" y="${Y(v) + 4}" text-anchor="end">${esc(P[3](v))}</text>`;
+  const y0 = new Date(t0).getUTCFullYear(), y1 = new Date(t1).getUTCFullYear();
+  for (let y = y0 + 1; y <= y1; y++) { const x = X(Date.UTC(y, 0, 1)); s += `<text x="${x}" y="${H - 8}" text-anchor="middle">${y}</text>`; }
+  let d = ""; recs.forEach((f, i) => { const x = X(f.epoch), y = Y(P[2](f)); d += i ? `H${x.toFixed(1)}V${y.toFixed(1)}` : `M${x.toFixed(1)},${y.toFixed(1)}`; });
+  d += `H${X(t1).toFixed(1)}`;
+  const col = state.style === "mono" ? "var(--ink)" : cm(0.8);
+  s += `<path d="${d}" style="fill:none;stroke:${col};stroke-width:2"/>`;
+  recs.forEach((f, i) => { const c = barColor(i, recs.length); s += `<circle class="sdot" cx="${X(f.epoch).toFixed(1)}" cy="${Y(P[2](f)).toFixed(1)}" r="4.5" style="fill:${c};stroke:var(--bg);stroke-width:1.5" data-id="${esc(f.id)}" data-tip="${esc(`New record ${prettyDate(f.date)}<br>${siteLabel(f)} · <b>${P[3](P[2](f))}</b>`)}"/>`; });
+  el.innerHTML = s + `</svg>`;
+  bindTips(el);
+  el.querySelectorAll(".sdot").forEach((c) => c.addEventListener("click", () => openFlight(list.find((f) => f.id === c.dataset.id), list)));
+}
+function renderDive(list) {
+  const P = DIVE_PARAMS.find((p) => p[0] === state.dive) || DIVE_PARAMS[0];
+  const vals = list.map(P[2]);
+  $("#xNote").textContent = list.length ? `${P[1]} across ${list.length} flights · median ${P[3](median(vals))} · best ${P[3](Math.max(...vals))}` : "No flights match these filters.";
+  // distribution
+  if (vals.length) {
+    // distances: fine bins up to 50 km, then 50–100, 100–200 and 200+ km
+    const vmax = Math.max(...vals), capped = (P[0] === "xcKm" || P[0] === "trackKm") && vmax > 50;
+    const lo0 = Math.min(...vals), hi0 = capped ? Math.min(50, vmax) : vmax;
+    const { step } = niceMax(Math.max(1e-6, hi0 - lo0), capped ? 5 : 10), lo = Math.floor(lo0 / step) * step;
+    const n = Math.max(1, Math.ceil((hi0 - lo) / step - 1e-9)), bins = Array.from({ length: n }, (_, i) => ({ a: lo + i * step, b: lo + (i + 1) * step, value: 0 }));
+    if (capped) {
+      bins.push({ a: 50, b: 100, value: 0, label: "50–100" });
+      if (vmax >= 100) bins.push({ a: 100, b: 200, value: 0, label: "100–200" });
+      if (vmax >= 200) bins.push({ a: 200, b: Infinity, value: 0, label: "200+" });
+    }
+    for (const v of vals) { const b = capped && v >= 50 ? bins.find((x) => x.label && v >= x.a && v < x.b) : bins[Math.min(n - 1, Math.max(0, Math.floor((v - lo) / step)))]; if (b) b.value++; }
+    barChart($("#cXHist"), bins.map((b) => ({ label: b.label || (capped ? String(Math.round(b.a)) : P[3](b.a).replace(/ (h|m|km|km\/h|m\/s)$/, "")), value: b.value, tip: `${b.b === Infinity ? `${P[3](b.a)} and more` : `${P[3](b.a)} – ${P[3](b.b)}`}<br><b>${b.value}</b> flight${b.value === 1 ? "" : "s"}` })), { yFmt: (v) => +v.toFixed(1), labelEvery: capped ? 1 : bins.length > 13 ? 3 : bins.length > 8 ? 2 : 1 });
+    $("#xHistNote").textContent = `median ${P[3](median(vals))}`;
+  } else $("#cXHist").innerHTML = "";
+  stripByYear($("#cXYear"), list, P);
+  const months = MONTHS.map((m, i) => { const fl = list.filter((f) => f.month === i + 1); const avg = fl.length ? fl.reduce((a, f) => a + P[2](f), 0) / fl.length : 0; return { label: m.slice(0, 1), value: avg, tip: `${m}<br>average <b>${P[3](avg)}</b> · ${fl.length} flights` }; });
+  barChart($("#cXMonth"), months, { yFmt: (v) => P[3](v).replace(/ (h|m|km|km\/h|m\/s)$/, "") });
+  recordLine($("#cXRec"), list, P);
+  const sites = groupSites(list).filter((s) => s.n >= 3).map((s) => { const v = s.flights.map(P[2]); return { ...s, avg: v.reduce((a, b) => a + b, 0) / v.length, best: Math.max(...v) }; }).sort((a, b) => b.avg - a.avg).slice(0, 12);
+  if (sites.length) hbarChart($("#cXSite"), sites.map((s) => ({ label: s.label, value: s.avg, valueLabel: P[3](s.avg), key: s.key, tip: `${esc(s.label)}<br>average <b>${P[3](s.avg)}</b> · best <b>${P[3](s.best)}</b><br>${s.n} flights` })), { onClick: (d) => { state.site = state.site === d.key ? "all" : d.key; render(); } });
+  else $("#cXSite").innerHTML = `<p class="muted">No site has 3 or more flights with these filters.</p>`;
+}
+function lanes(el, gliders) {
+  if (!gliders.length) { el.innerHTML = `<p class="muted">No flights.</p>`; return; }
+  const all = gliders.flatMap((g) => g.flights), t0 = Math.min(...all.map((f) => f.epoch)), t1 = Math.max(...all.map((f) => f.epoch));
+  const y0 = new Date(t0).getUTCFullYear(), y1 = new Date(t1).getUTCFullYear() + 1;
+  const T0 = Date.UTC(y0, 0, 1), T1 = Date.UTC(y1, 0, 1);
+  const W = 860, ml = 190, mr = 70, rowH = 40, mt = 22, H = mt + gliders.length * rowH + 4, iw = W - ml - mr;
+  const X = (t) => ml + ((t - T0) / (T1 - T0)) * iw, maxAir = Math.max(...all.map((f) => f.airtime));
+  let s = `<svg viewBox="0 0 ${W} ${H}" role="img">`;
+  for (let y = y0; y <= y1; y++) { const x = X(Date.UTC(y, 0, 1)); s += `<line class="grid" x1="${x}" x2="${x}" y1="${mt - 4}" y2="${H}"/>`; if (y < y1) s += `<text x="${x + 4}" y="12">${y}</text>`; }
+  gliders.forEach((g, r) => {
+    const yc = mt + r * rowH + rowH / 2, col = cm(gliders.length < 2 ? 0.85 : 0.3 + 0.7 * (r / (gliders.length - 1)));
+    s += `<g class="lane" data-k="${esc(g.key)}"><rect class="lanebg" x="0" y="${mt + r * rowH}" width="${W}" height="${rowH}"/>`;
+    s += `<line class="grid" x1="${ml}" x2="${W - mr}" y1="${yc}" y2="${yc}"/>`;
+    const lab = g.label.length > 24 ? g.label.slice(0, 23) + "…" : g.label;
+    s += `<text x="${ml - 12}" y="${yc - 2}" text-anchor="end" style="font-family:var(--font-body);font-size:12.5px;fill:var(--ink)">${esc(lab)}</text><text x="${ml - 12}" y="${yc + 12}" text-anchor="end">${g.first.slice(0, 7)} – ${g.last.slice(0, 7)}</text>`;
+    for (const f of g.flights) { const x = X(f.epoch), hh = 3 + 14 * Math.sqrt(f.airtime / maxAir); s += `<line class="tick" x1="${x.toFixed(1)}" x2="${x.toFixed(1)}" y1="${yc - hh}" y2="${yc + hh}" style="stroke:${col}"/>`; }
+    s += `<text x="${W - mr + 8}" y="${yc + 4}" style="fill:var(--ink)">${fmtHours(g.air)} h</text></g>`;
+  });
+  el.innerHTML = s + `</svg>`;
+  el.querySelectorAll(".lane").forEach((ln) => {
+    const g = gliders.find((q) => q.key === ln.dataset.k);
+    ln.addEventListener("mousemove", (e) => showTip(`${esc(g.label)}<br><b>${g.n}</b> flights · <b>${fmtH(g.air)}</b> h<br>${g.first} → ${g.last}`, e.clientX, e.clientY));
+    ln.addEventListener("mouseleave", hideTip);
+    ln.addEventListener("click", () => { state.glider = state.glider === g.key ? "all" : g.key; render(); });
+  });
+}
+
+
+/* ---------- Where & when: decision helper built from your own flights ---------- */
+const MONTH_LONG = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+const MEASURES = {
+  airtime: { unit: "min", def: 120, get: (f) => f.airtime / 60, vfmt: (v) => `${fmtH(v * 60)} h`, short: (v) => fmtH(v * 60) },
+  xcKm: { unit: "km", def: 10, get: (f) => f.xcKm, vfmt: (v) => `${fmtKm(v)} km`, short: (v) => fmtKm(v) },
+  gain: { unit: "m", def: 500, get: (f) => f.gain, vfmt: (v) => `${fmtM(v)} m`, short: (v) => fmtM(v) },
+};
+const curM = () => MEASURES[state.where.measure] || MEASURES.airtime;
+const isGood = (f) => curM().get(f) >= state.where.value;
+const isBomb = (f) => f.airtime < state.where.bomb * 60;
+const whereFlights = (list) => (state.where.tandem ? list : list.filter((f) => !f.tandem));
+const uniqDays = (fl) => new Set(fl.map((f) => f.date)).size;
+const pct = (a, b) => (b ? Math.round((100 * a) / b) : 0);
+const accentCol = () => (state.style === "mono" ? css("--ink") : cm(0.78));
+const hhmm = (h) => { const m = Math.round(h * 60); return `${String(Math.floor(m / 60) % 24).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`; };
+const dayNum = (d) => { const [y, m, dd] = d.split("-").map(Number); return Date.UTC(y, m - 1, dd) / 864e5; };
+function fmtRange(a, b) {
+  const [y1, m1, d1] = a.split("-").map(Number), [y2, m2, d2] = b.split("-").map(Number);
+  if (a === b) return `${d1} ${MONTHS[m1 - 1]} ${y1}`;
+  if (y1 === y2 && m1 === m2) return `${d1}–${d2} ${MONTHS[m1 - 1]} ${y1}`;
+  if (y1 === y2) return `${d1} ${MONTHS[m1 - 1]} – ${d2} ${MONTHS[m2 - 1]} ${y1}`;
+  return `${d1} ${MONTHS[m1 - 1]} ${y1} – ${d2} ${MONTHS[m2 - 1]} ${y2}`;
+}
+const inkOn = (hex) => {
+  if (!hex || hex[0] !== "#") return "var(--ink)";
+  const [r, g, b] = hexRgb(hex).map((v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; });
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b > 0.32 ? "#111111" : "#ffffff";
+};
+const selMonths = () => (state.where.months && state.where.months.length ? state.where.months : [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
+function monthsLabel(ms) {
+  const s = [...new Set(ms)].sort((a, b) => a - b);
+  if (!s.length || s.length === 12) return "all year";
+  if (s.length === 1) return MONTH_LONG[s[0] - 1];
+  for (const start of s) {
+    let run = true;
+    for (let k = 0; k < s.length; k++) if (!s.includes(((start - 1 + k) % 12) + 1)) { run = false; break; }
+    if (run) return `${MONTH_LONG[start - 1]} to ${MONTH_LONG[(start - 2 + s.length) % 12]}`;
+  }
+  return s.map((m) => MONTHS[m - 1]).join(", ");
+}
+const nowMonth = () => new Date().getMonth() + 1;
+const PRESETS = [
+  ["all", "All year", () => [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]],
+  ["now", "Around now", () => { const m = nowMonth(); return [((m + 10) % 12) + 1, m, (m % 12) + 1]; }],
+  ["spring", "Mar–May", () => [3, 4, 5]],
+  ["summer", "Jun–Aug", () => [6, 7, 8]],
+  ["autumn", "Sep–Nov", () => [9, 10, 11]],
+  ["winter", "Dec–Feb", () => [12, 1, 2]],
+];
+function toggleMonth(m) {
+  let ms = [...(state.where.months || [])];
+  if (ms.length === 12) ms = [m];
+  else ms = ms.includes(m) ? ms.filter((x) => x !== m) : [...ms, m];
+  state.where.months = ms.sort((a, b) => a - b);
+  renderWhere(filtered());
+}
+
+/* sites within 60 km of each other form one region */
+function buildRegions(sites) {
+  const parent = sites.map((_, i) => i), find = (i) => (parent[i] === i ? i : (parent[i] = find(parent[i])));
+  for (let i = 0; i < sites.length; i++) for (let j = i + 1; j < sites.length; j++) if (dist(sites[i].lat, sites[i].lon, sites[j].lat, sites[j].lon) < 60) parent[find(i)] = find(j);
+  const groups = new Map();
+  sites.forEach((s, i) => { const r = find(i); if (!groups.has(r)) groups.set(r, []); groups.get(r).push(s); });
+  const bySite = new Map();
+  for (const g of groups.values()) {
+    g.sort((a, b) => b.n - a.n);
+    const country = g.flatMap((s) => s.flights).map((f) => f.country).find(Boolean) || "";
+    const reg = { key: g[0].key, label: g.length > 1 ? `${g[0].label} area` : g[0].label, multi: g.length > 1, country, sites: g };
+    for (const s of g) bySite.set(s.key, reg);
+  }
+  return bySite;
+}
+const regionOf = (reg, f) => reg.get(siteKey(f)) || { key: siteKey(f), label: siteLabel(f), multi: false, country: f.country || "" };
+const regionLine = (r) => [r && r.multi ? r.label : "", r && r.country].filter(Boolean).join(" · ");
+
+function siteStats(fl) {
+  const M = curM(), good = fl.filter(isGood);
+  const best = fl.reduce((a, f) => (!a || M.get(f) > M.get(a) ? f : a), null);
+  return {
+    n: fl.length, good: good.length, bomb: fl.filter(isBomb).length, rate: fl.length ? good.length / fl.length : 0,
+    medAir: median(fl.map((f) => f.airtime)), best, years: [...new Set(fl.map((f) => f.year))].sort(),
+    goodHour: good.length ? median(good.map((f) => f.hour)) : null, days: uniqDays(fl),
+  };
+}
+const evidence = (s) => (s.n >= 8 && s.years.length >= 2 ? ["strong", "Solid evidence"] : s.n >= 3 ? ["", "Some evidence"] : ["", "Thin evidence"]);
+
+/* ---------- generic scatter ---------- */
+function niceDomain(lo, hi, ticks = 4) {
+  if (!(hi > lo)) hi = lo + 1;
+  const { step } = niceMax(hi - lo, ticks);
+  return { lo: Math.floor(lo / step + 1e-9) * step, hi: Math.ceil(hi / step - 1e-9) * step, step };
+}
+function scatterXY(el, pts, o = {}) {
+  if (!pts.length) { el.innerHTML = `<p class="muted">${o.empty || "Not enough flights yet."}</p>`; return; }
+  const W = o.W || 560, H = o.H || 300, ml = 58, mr = 18, mt = 30, mb = 38, iw = W - ml - mr, ih = H - mt - mb;
+  const xd = o.xDomain ? { lo: o.xDomain[0], hi: o.xDomain[1], step: o.xStep || niceMax(o.xDomain[1] - o.xDomain[0], 4).step } : niceDomain(Math.min(...pts.map((p) => p.x)), Math.max(...pts.map((p) => p.x)));
+  const yd = niceDomain(Math.min(o.yZero ? 0 : Infinity, ...pts.map((p) => p.y)), Math.max(...pts.map((p) => p.y)));
+  const X = (v) => ml + ((v - xd.lo) / (xd.hi - xd.lo)) * iw, Y = (v) => mt + ih - ((v - yd.lo) / (yd.hi - yd.lo)) * ih;
+  let s = `<svg viewBox="0 0 ${W} ${H}" role="img">`;
+  for (let v = yd.lo; v <= yd.hi + 1e-9; v += yd.step) s += `<line class="grid" x1="${ml}" x2="${W - mr}" y1="${Y(v)}" y2="${Y(v)}"/><text x="${ml - 6}" y="${Y(v) + 4}" text-anchor="end">${esc(o.yFmt ? o.yFmt(v) : +v.toFixed(1))}</text>`;
+  for (let v = xd.lo; v <= xd.hi + 1e-9; v += xd.step) s += `<text x="${X(v)}" y="${H - 20}" text-anchor="middle">${esc(o.xFmt ? o.xFmt(v) : +v.toFixed(1))}</text>`;
+  if (o.xLabel) s += `<text x="${ml}" y="${H - 3}">${esc(o.xLabel)}</text>`;
+  if (o.yLabel) s += `<text x="4" y="12">${esc(o.yLabel)}</text>`;
+  if (o.vx != null) s += `<line class="medline" x1="${X(o.vx)}" x2="${X(o.vx)}" y1="${mt}" y2="${mt + ih}"/>`;
+  if (o.hy != null) s += `<line class="medline" x1="${ml}" x2="${W - mr}" y1="${Y(o.hy)}" y2="${Y(o.hy)}"/>`;
+  const order = pts.map((p, i) => i).sort((a, b) => pts[b].r - pts[a].r);
+  for (const i of order) {
+    const p = pts[i];
+    s += `<circle class="sdot" cx="${X(p.x).toFixed(1)}" cy="${Y(p.y).toFixed(1)}" r="${p.r.toFixed(1)}" style="fill:${p.color};fill-opacity:${p.filled === false ? 0.04 : 0.55};stroke:${p.color};stroke-width:1.4" data-i="${i}" data-tip="${esc(p.tip)}"/>`;
+  }
+  /* labels: placed in priority order (default: biggest bubbles first), trying spots ever further out in 8 directions.
+     First pass keeps clear of labels and bubbles; second pass may sit over bubbles (labels have a halo).
+     Labels moved away from their bubble get a thin leader line. */
+  const boxes = [], leaders = [];
+  let texts = "";
+  const prio = pts.map((p, i) => i).filter((i) => pts[i].label).sort((a, b) => (o.labelPriority ? o.labelPriority(pts[b]) - o.labelPriority(pts[a]) : pts[b].r - pts[a].r));
+  const fs = o.labelSize || 11.5, cwid = fs * 0.56;
+  for (const i of prio) {
+    const p = pts[i], lab = p.label.length > 24 ? p.label.slice(0, 23) + "…" : p.label, tw = lab.length * cwid, cx = X(p.x), cy = Y(p.y), r = p.r, d7 = 0.71;
+    const spotsAt = (d) => [
+      [cx + r + 4 + d, cy + 4], [cx + r * d7 + 2 + d * d7, cy - r * d7 - 3 - d * d7], [cx - tw / 2, cy - r - 5 - d], [cx - r * d7 - 2 - tw - d * d7, cy - r * d7 - 3 - d * d7],
+      [cx - r - 4 - tw - d, cy + 4], [cx + r * d7 + 2 + d * d7, cy + r * d7 + 12 + d * d7], [cx - tw / 2, cy + r + 13 + d], [cx - r * d7 - 2 - tw - d * d7, cy + r * d7 + 12 + d * d7],
+    ];
+    const inChart = (box) => box[0] >= 2 && box[2] <= W - 2 && box[1] >= mt - 6 && box[3] <= mt + ih + 2;
+    const hitLabels = (box) => boxes.some((bx) => !(box[2] + 2 < bx[0] || box[0] - 2 > bx[2] || box[3] + 1 < bx[1] || box[1] - 1 > bx[3]));
+    const hitBubbles = (box) => pts.some((q) => { if (q === p) return false; const qx = X(q.x), qy = Y(q.y), dx = Math.max(box[0], Math.min(qx, box[2])) - qx, dy = Math.max(box[1], Math.min(qy, box[3])) - qy; return dx * dx + dy * dy < (q.r + 1) * (q.r + 1); });
+    const hitSelf = (box) => { const dx = Math.max(box[0], Math.min(cx, box[2])) - cx, dy = Math.max(box[1], Math.min(cy, box[3])) - cy; return dx * dx + dy * dy < r * r; };
+    let spot = null, dist = 0;
+    for (const strict of [true, false]) {
+      for (const d of [0, 12, 26, 42, 60]) {
+        spot = spotsAt(d).map(([x, y]) => [x, y, [x, y - fs + 1.5, x + tw, y + 3]]).find(([, , box]) => inChart(box) && !hitSelf(box) && !hitLabels(box) && (!strict || !hitBubbles(box)));
+        if (spot) { dist = d; break; }
+      }
+      if (spot) break;
+    }
+    if (!spot) continue;
+    const box = spot[2]; boxes.push(box);
+    if (dist > 0) {
+      const bx = Math.max(box[0], Math.min(cx, box[2])), by = Math.max(box[1], Math.min(cy, box[3])), ang = Math.atan2(by - cy, bx - cx);
+      leaders.push(`<line x1="${(cx + r * Math.cos(ang)).toFixed(1)}" y1="${(cy + r * Math.sin(ang)).toFixed(1)}" x2="${bx.toFixed(1)}" y2="${by.toFixed(1)}" style="stroke:var(--muted);stroke-width:.8;pointer-events:none"/>`);
+    }
+    texts += `<text x="${spot[0].toFixed(1)}" y="${spot[1].toFixed(1)}" style="font-family:var(--font-body);font-size:${fs}px;fill:var(--ink);pointer-events:none;paint-order:stroke;stroke:var(--bg);stroke-width:3px;stroke-linejoin:round">${esc(lab)}</text>`;
+  }
+  s += leaders.join("") + texts;
+  el.innerHTML = s + `</svg>`;
+  bindTips(el);
+  if (o.onClick) el.querySelectorAll(".sdot").forEach((d) => d.addEventListener("click", () => { hideTip(); o.onClick(pts[+d.dataset.i]); }));
+}
+
+/* ---------- sections ---------- */
+function renderMonthChips(wl) {
+  const set = selMonths(), col = accentCol(), same = (x) => x.length === set.length && x.every((m) => set.includes(m));
+  $("#monthPresets").innerHTML = PRESETS.map(([k, n, f]) => `<button type="button" data-k="${k}" aria-pressed="${same(f())}">${n}</button>`).join("");
+  $("#monthPresets").querySelectorAll("button").forEach((b) => b.addEventListener("click", () => { state.where.months = PRESETS.find((p) => p[0] === b.dataset.k)[2](); renderWhere(filtered()); }));
+  const per = MONTHS.map((_, i) => { const fl = wl.filter((f) => f.month === i + 1); return { days: uniqDays(fl), good: fl.filter(isGood).length, n: fl.length }; });
+  const max = Math.max(1, ...per.map((p) => p.days));
+  $("#monthChips").innerHTML = per.map((p, i) => {
+    const h = Math.round((44 * p.days) / max), gh = p.n ? Math.round((h * p.good) / p.n) : 0;
+    return `<button type="button" data-m="${i + 1}" aria-pressed="${set.includes(i + 1)}" title="${MONTH_LONG[i]}: ${p.days} flying days, ${p.good} of ${p.n} flights good"><span class="mb"><i style="height:${h - gh}px;background:var(--line)"></i><i style="height:${gh}px;background:${col}"></i></span><span class="mn"><span>${MONTHS[i]}</span><small>${p.days}</small></span></button>`;
+  }).join("");
+  $("#monthChips").querySelectorAll("button").forEach((b) => b.addEventListener("click", () => toggleMonth(+b.dataset.m)));
+}
+function renderCards(wl, reg) {
+  const M = curM(), set = selMonths(), label = monthsLabel(set);
+  const fl = wl.filter((f) => set.includes(f.month)), col = accentCol();
+  if (!fl.length) {
+    const flown = [...new Set(wl.map((f) => f.month))].sort((a, b) => a - b);
+    $("#monthSummary").textContent = `You haven't flown in ${label} yet.${flown.length ? ` You have flown in ${flown.map((m) => MONTH_LONG[m - 1]).join(", ")}.` : ""}`;
+    $("#siteCards").innerHTML = "";
+    return;
+  }
+  const all = siteStats(fl), years = all.years.length;
+  $("#monthSummary").innerHTML = `${label === "all year" ? "Across the year" : `In ${label}`} you've flown <b>${all.days}</b> day${all.days === 1 ? "" : "s"} over ${years} season${years === 1 ? "" : "s"}, at ${groupSites(fl).length} site${groupSites(fl).length === 1 ? "" : "s"}. <b>${all.good} of ${all.n}</b> flights were good and ${all.bomb} were bomb-outs. Best: ${M.vfmt(M.get(all.best))} at ${esc(siteLabel(all.best))} on ${prettyDate(all.best.date)}.`;
+  const p0 = all.rate;
+  const rows = groupSites(fl).map((s) => { const st = siteStats(s.flights); return { s, st, score: (st.good + 3 * p0) / (st.n + 3) }; }).sort((a, b) => b.score - a.score || b.st.n - a.st.n).slice(0, 12);
+  $("#siteCards").innerHTML = rows.map(({ s, st }) => {
+    const ev = evidence(st), r = reg.get(s.key);
+    return `<button type="button" class="scard" data-key="${esc(s.key)}">
+      <span class="eyebrow">${esc(regionLine(r)) || "&nbsp;"}</span>
+      <span class="sname">${esc(s.label)}</span>
+      <span class="meter"><i style="width:${pct(st.good, st.n)}%;background:${col}"></i></span>
+      <span class="big">${st.good} of ${st.n} good · ${pct(st.good, st.n)}%</span>
+      <dl><dt>Median airtime</dt><dd>${fmtH(st.medAir)}</dd><dt>Best</dt><dd>${M.vfmt(M.get(st.best))}</dd><dt>Bomb-outs</dt><dd>${st.bomb} of ${st.n}</dd><dt>Good flights launched around</dt><dd>${st.goodHour == null ? "–" : hhmm(st.goodHour)}</dd></dl>
+      <span class="ev ${ev[0]}">${ev[1]}</span>
+      <small>Flown here in ${st.years.join(", ")}</small>
+    </button>`;
+  }).join("");
+  $("#siteCards").querySelectorAll(".scard").forEach((b) => b.addEventListener("click", () => openSiteProfile(b.dataset.key)));
+}
+function renderSiteCal(wl, reg) {
+  const W = state.where, M = curM(), set = selMonths(), metric = W.cal;
+  let sites = groupSites(wl).filter((s) => s.n >= 2);
+  const val = (fl) => {
+    if (!fl.length) return null;
+    if (metric === "air") return fl.reduce((t, f) => t + f.airtime, 0);
+    if (metric === "flights") return fl.length;
+    if (metric === "good") return fl.filter(isGood).length;
+    if (metric === "rate") return fl.filter(isGood).length / fl.length;
+    if (metric === "median") return median(fl.map((f) => f.airtime));
+    return Math.max(...fl.map(M.get));
+  };
+  // rank by the same measure the squares show, over all months; more flights breaks ties
+  sites.sort((a, b) => (val(b.flights) ?? 0) - (val(a.flights) ?? 0) || b.n - a.n);
+  sites = sites.slice(0, 30);
+  const el = $("#cSiteCal");
+  if (!sites.length) { el.innerHTML = `<p class="muted">No site has 2 or more flights with these filters.</p>`; return; }
+  const txt = (v) => (v == null ? "" : metric === "rate" ? `${Math.round(v * 100)}` : metric === "median" || metric === "air" ? fmtH(v) : metric === "best" ? M.short(v) : String(v));
+  const cells = sites.map((s) => MONTHS.map((_, i) => { const fl = s.flights.filter((f) => f.month === i + 1); return { fl, v: val(fl) }; }));
+  const vmax = Math.max(1e-9, ...cells.flat().map((c) => c.v || 0));
+  const Wd = 900, ml = 215, mr = 92, mt = 26, rowH = 28, cw = (Wd - ml - mr) / 12, H = mt + sites.length * rowH + 6;
+  let s = `<svg viewBox="0 0 ${Wd} ${H}" role="img">`;
+  MONTHS.forEach((m, i) => {
+    const on = set.includes(i + 1);
+    if (on && set.length < 12) s += `<rect x="${ml + i * cw}" y="2" width="${cw}" height="${H - 4}" style="fill:var(--sunk)"/>`;
+    s += `<text class="collab${on && set.length < 12 ? " on" : ""}" data-m="${i + 1}" x="${ml + i * cw + cw / 2}" y="16" text-anchor="middle">${m}</text>`;
+  });
+  s += `<text x="${Wd - mr + 10}" y="16">all year</text>`;
+  sites.forEach((site, r) => {
+    const y = mt + r * rowH;
+    const lab = site.label.length > 30 ? site.label.slice(0, 29) + "…" : site.label;
+    s += `<text class="rowlab" data-k="${esc(site.key)}" x="${ml - 10}" y="${y + rowH / 2 + 4}" text-anchor="end" style="font-family:var(--font-body);font-size:12.5px;fill:var(--ink)">${esc(lab)}</text>`;
+    cells[r].forEach((c, i) => {
+      const x = ml + i * cw;
+      if (c.v == null) { s += `<rect x="${x + 1.5}" y="${y + 2}" width="${cw - 3}" height="${rowH - 4}" style="fill:var(--sunk);opacity:.6"/>`; return; }
+      const t = metric === "rate" ? c.v : c.v / vmax, fill = cm(0.12 + 0.88 * Math.min(1, t));
+      const g = c.fl.filter(isGood).length;
+      s += `<rect class="cellhit" data-r="${r}" data-m="${i + 1}" x="${x + 1.5}" y="${y + 2}" width="${cw - 3}" height="${rowH - 4}" style="fill:${fill}" data-tip="${esc(`${site.label} · ${MONTH_LONG[i]}<br><b>${c.fl.length}</b> flights · <b>${g}</b> good · ${uniqDays(c.fl)} flying days<br>best ${M.vfmt(Math.max(...c.fl.map(M.get)))} · seasons ${[...new Set(c.fl.map((f) => f.year))].sort().join(", ")}`)}"/>`;
+      s += `<text x="${x + cw / 2}" y="${y + rowH / 2 + 4}" text-anchor="middle" style="fill:${inkOn(fill)};pointer-events:none;font-size:10.5px">${esc(txt(c.v))}</text>`;
+    });
+    const tot = val(site.flights);
+    s += `<text x="${Wd - mr + 10}" y="${y + rowH / 2 + 4}" style="fill:var(--ink)">${esc(metric === "rate" ? `${Math.round(tot * 100)}%` : txt(tot))}</text>`;
+  });
+  el.innerHTML = s + `</svg>`;
+  bindTips(el);
+  el.querySelectorAll(".cellhit").forEach((c) => c.addEventListener("click", () => { hideTip(); showCell(sites[+c.dataset.r], +c.dataset.m, cells[+c.dataset.r][+c.dataset.m - 1].fl); }));
+  el.querySelectorAll(".rowlab").forEach((t) => t.addEventListener("click", () => openSiteProfile(t.dataset.k)));
+  el.querySelectorAll(".collab").forEach((t) => t.addEventListener("click", () => toggleMonth(+t.dataset.m)));
+}
+function flightRows(fl) {
+  const M = curM();
+  return `<thead><tr><th>Date</th><th class="n">Airtime</th><th class="n">XC km</th><th class="n">Gain m</th><th class="n">Max alt m</th><th>Result</th><th>Glider</th></tr></thead><tbody>` +
+    fl.map((f, i) => `<tr data-i="${i}"><td><span class="mono">${f.date}</span> <span class="muted mono">${DOW[f.dow]} ${f.time}</span></td><td class="n">${fmtH(f.airtime)}</td><td class="n">${fmtKm(f.xcKm)}</td><td class="n">${fmtM(f.gain)}</td><td class="n">${fmtM(f.maxAlt)}</td><td>${isGood(f) ? `<span class="badge" style="color:var(--ink);border-color:var(--ink)">good</span>` : isBomb(f) ? `<span class="badge">bomb-out</span>` : ""}</td><td>${esc(f.glider || "–")}</td></tr>`).join("") + `</tbody>`;
+}
+function bindRows(table, fl) { table.querySelectorAll("tbody tr").forEach((tr) => tr.addEventListener("click", () => openFlight(fl[+tr.dataset.i], fl))); }
+function showCell(site, m, fl) {
+  fl = [...fl].sort((a, b) => b.epoch - a.epoch);
+  $("#cellList").innerHTML = `<div class="toolbar"><h3 style="font-family:var(--font-display);font-weight:500;margin:0">${esc(site.label)} in ${MONTH_LONG[m - 1]} · ${fl.length} flight${fl.length === 1 ? "" : "s"}</h3><span class="actions"><button type="button" id="cellSite">Site profile</button><button type="button" id="cellClose">Close</button></span></div><div class="tablewrap"><table id="tCell"></table></div>`;
+  $("#tCell").innerHTML = flightRows(fl); bindRows($("#tCell"), fl);
+  $("#cellClose").addEventListener("click", () => { $("#cellList").innerHTML = ""; });
+  $("#cellSite").addEventListener("click", () => openSiteProfile(site.key));
+}
+function renderRel(wlAll) {
+  const set = selMonths(), wl = wlAll.filter((f) => set.includes(f.month));
+  const M = curM(), col = accentCol();
+  const rows = groupSites(wl).filter((s) => s.n >= 3).map((s) => {
+    const st = siteStats(s.flights), v = s.flights.map(M.get).sort((a, b) => a - b);
+    return { s, st, p75: v[Math.round(0.75 * (v.length - 1))] };
+  });
+  const all = wl.map(M.get).sort((a, b) => a - b), allP75 = all.length ? all[Math.round(0.75 * (all.length - 1))] : 0;
+  const maxN = Math.max(1, ...rows.map((r) => r.st.n));
+  const ranked = [...rows].sort((a, b) => b.st.n - a.st.n);
+  scatterXY($("#cRel"), rows.map((r, i) => ({
+    x: r.st.rate * 100, y: r.p75, r: 6 + 22 * Math.sqrt(r.st.n / maxN), color: barColor(ranked.indexOf(r), rows.length) === "var(--accent)" ? col : barColor(ranked.indexOf(r), rows.length), key: r.s.key,
+    label: r.s.label,
+    tip: `${r.s.label}<br><b>${r.st.good} of ${r.st.n}</b> good (${pct(r.st.good, r.st.n)}%)<br>top quarter of flights reach <b>${M.vfmt(r.p75)}</b><br>best ${M.vfmt(M.get(r.st.best))}`,
+  })), {
+    W: 900, H: 540, labelSize: 11, labelPriority: (p) => p.x / 100 + p.y / Math.max(1e-9, ...rows.map((q) => q.p75)) + 0.05 * p.r / 28, xDomain: [0, 100], xStep: 10, xFmt: (v) => `${v}%`, yFmt: (v) => M.short(v), yZero: true,
+    xLabel: "good-flight rate →", yLabel: `${state.where.measure === "airtime" ? "airtime" : M.unit} reached by your top quarter`,
+    vx: wl.length ? (100 * wl.filter(isGood).length) / wl.length : null, hy: allP75,
+    empty: `No site has 3 or more flights in ${monthsLabel(set)} with these filters.`, onClick: (p) => openSiteProfile(p.key),
+  });
+}
+function renderDow(wl) {
+  const order = [1, 2, 3, 4, 5, 6, 0];
+  barChart($("#cDow"), order.map((d) => {
+    const fl = wl.filter((f) => f.dow === d), days = uniqDays(fl), g = fl.filter(isGood).length;
+    return { label: DOW[d], value: days, tip: `${DOW[d]}<br><b>${days}</b> flying days · ${g} good flights` };
+  }), { yFmt: (v) => +v.toFixed(1) });
+}
+function renderGoodHour(wl) {
+  const hours = Array.from({ length: 24 }, (_, h) => wl.filter((f) => Math.floor(f.hour) % 24 === h));
+  const used = hours.map((fl, h) => (fl.length ? h : -1)).filter((h) => h >= 0);
+  const el = $("#cGoodHour");
+  if (!used.length) { el.innerHTML = `<p class="muted">No flights.</p>`; return; }
+  const lo = Math.max(0, Math.min(...used) - 1), hi = Math.min(23, Math.max(...used) + 1);
+  barChart(el, hours.slice(lo, hi + 1).map((fl, i) => {
+    const h = lo + i, g = fl.filter(isGood).length;
+    return { label: String(h).padStart(2, "0"), value: fl.length, color: fl.length ? cm(0.15 + 0.85 * (g / fl.length)) : "var(--line)", tip: `${String(h).padStart(2, "0")}:00–${String(h).padStart(2, "0")}:59<br><b>${fl.length}</b> flights · <b>${g}</b> good (${pct(g, fl.length)}%)` };
+  }), { yFmt: (v) => +v.toFixed(1), labelEvery: hi - lo > 12 ? 2 : 1 });
+}
+function renderRhythm(wl) {
+  const days = [...new Set(wl.map((f) => f.date))].sort(), el = $("#cRhythm");
+  if (!days.length) { $("#rhythmStats").innerHTML = ""; el.innerHTML = `<p class="muted">No flights.</p>`; return; }
+  const years = [...new Set(days.map((d) => +d.slice(0, 4)))].sort();
+  const nums = days.map(dayNum), gaps = nums.slice(1).map((n, i) => n - nums[i]);
+  let gi = 0; gaps.forEach((g, i) => { if (g > gaps[gi]) gi = i; });
+  const weekend = days.filter((d) => { const w = new Date(dayNum(d) * 864e5).getUTCDay(); return w === 0 || w === 6; }).length;
+  const perYear = years.map((y) => days.filter((d) => d.startsWith(String(y))).length);
+  const monthsFlown = years.map((y) => new Set(days.filter((d) => d.startsWith(String(y))).map((d) => d.slice(5, 7))).size);
+  const st = (v, l) => `<div><b>${v}</b><small>${l}</small></div>`;
+  $("#rhythmStats").innerHTML =
+    st(Math.round(days.length / years.length), "flying days per year, on average") +
+    st(`${Math.max(...perYear)}`, `in your busiest year, ${years[perYear.indexOf(Math.max(...perYear))]}`) +
+    st(gaps.length ? `${median(gaps)} d` : "–", "typical wait between flying days") +
+    st(gaps.length ? `${gaps[gi] - 1} d` : "–", gaps.length ? `longest break, ${fmtRange(days[gi], days[gi + 1])}` : "longest break") +
+    st(`${pct(weekend, days.length)}%`, "of flying days on a weekend") +
+    st((monthsFlown.reduce((a, b) => a + b, 0) / years.length).toFixed(1), "months a year with any flying");
+  const ym = (y, m) => `${y}-${String(m).padStart(2, "0")}`;
+  const byCell = {};
+  for (const f of wl) (byCell[f.date.slice(0, 7)] ||= []).push(f);
+  // left: how much you fly
+  ymGrid(el, years, (y, m) => { const fl = byCell[ym(y, m)] || []; return fl.length ? uniqDays(fl) : null; }, (v) => String(v),
+    (y, m, v) => `${MONTH_LONG[m - 1]} ${y}<br><b>${v || 0}</b> flying day${v === 1 ? "" : "s"}`, (y) => perYear[years.indexOf(y)],
+    (y, v) => `${y}<br><b>${v}</b> flying days`);
+  // right: how good it was
+  const M = curM(), q = state.where.qual || "good";
+  $("#qualNote").textContent = { good: "good flights per month", rate: "% of flights that were good", air: "airtime per month", best: "best flight each month" }[q];
+  const qv = (fl) => (!fl || !fl.length ? null : q === "good" ? fl.filter(isGood).length : q === "rate" ? fl.filter(isGood).length / fl.length : q === "air" ? fl.reduce((s, f) => s + f.airtime, 0) : Math.max(...fl.map(M.get)));
+  const qf = (v) => (q === "rate" ? `${Math.round(v * 100)}` : q === "air" ? fmtH(v) : q === "best" ? M.short(v) : String(v));
+  const yearFl = (y) => wl.filter((f) => f.year === y);
+  ymGrid($("#cQuality"), years, (y, m) => qv(byCell[ym(y, m)]), qf,
+    (y, m, v) => { const fl = byCell[ym(y, m)] || []; const g = fl.filter(isGood).length; return `${MONTH_LONG[m - 1]} ${y}<br><b>${g}</b> good of ${fl.length} flights${fl.length ? ` (${pct(g, fl.length)}%)` : ""}<br>airtime <b>${fmtH(fl.reduce((s, f) => s + f.airtime, 0))}</b> h${fl.length ? ` · best ${M.vfmt(Math.max(...fl.map(M.get)))}` : ""}`; },
+    (y) => qv(yearFl(y)),
+    (y, v) => { const fl = yearFl(y), g = fl.filter(isGood).length; return `${y}<br><b>${g}</b> good of ${fl.length} flights (${pct(g, fl.length)}%)<br>airtime <b>${fmtH(fl.reduce((s, f) => s + f.airtime, 0))}</b> h · best ${M.vfmt(Math.max(...fl.map(M.get)))}`; },
+    q === "rate");
+}
+/* year × month heatmap, plus a wider column collapsing each year; months and years each scale to their own maximum (rates to 0–100%) */
+function ymGrid(el, years, valFn, fmt, tipFn, yearFn, yearTip, isRate) {
+  const vals = {}; let max = 0;
+  for (const y of years) for (let m = 1; m <= 12; m++) { const v = valFn(y, m); vals[`${y}-${m}`] = v; if (v != null && v > max) max = v; }
+  const yv = years.map((y) => yearFn(y)), ymax = Math.max(0, ...yv.filter((v) => v != null));
+  const Wd = 560, ml = 40, gap = 10, yw = 64, mt = 18, cw = (Wd - ml - gap - yw) / 12, ch = 24, H = mt + years.length * ch + 4, yx = ml + 12 * cw + gap;
+  const shade = (v, mx) => (v == null ? null : v === 0 ? "var(--line)" : cm(0.12 + 0.88 * (isRate ? v : mx ? Math.sqrt(v / mx) : 0)));
+  let s = `<svg viewBox="0 0 ${Wd} ${H}" role="img">`;
+  MONTHS.forEach((m, i) => { s += `<text x="${ml + i * cw + cw / 2}" y="12" text-anchor="middle">${m[0]}</text>`; });
+  s += `<text x="${yx + yw / 2}" y="12" text-anchor="middle">year</text>`;
+  years.forEach((y, r) => {
+    const yy = mt + r * ch;
+    s += `<text x="${ml - 6}" y="${yy + ch / 2 + 4}" text-anchor="end">${y}</text>`;
+    for (let m = 1; m <= 12; m++) {
+      const v = vals[`${y}-${m}`], x = ml + (m - 1) * cw, fill = shade(v, max);
+      s += `<rect class="cell" x="${x}" y="${yy}" width="${cw}" height="${ch}" style="fill:${fill || "var(--sunk)"}" data-tip="${esc(tipFn(y, m, v))}"/>`;
+      if (v != null) s += `<text x="${x + cw / 2}" y="${yy + ch / 2 + 4}" text-anchor="middle" style="fill:${v === 0 ? "var(--muted)" : inkOn(fill)};pointer-events:none;font-size:10px">${esc(fmt(v))}</text>`;
+    }
+    const v = yv[r], fill = shade(v, ymax);
+    s += `<rect class="cell" x="${yx}" y="${yy}" width="${yw}" height="${ch}" style="fill:${fill || "var(--sunk)"}" data-tip="${esc(v == null ? `${y}<br>no flights` : yearTip(y, v))}"/>`;
+    if (v != null) s += `<text x="${yx + yw / 2}" y="${yy + ch / 2 + 4}" text-anchor="middle" style="fill:${v === 0 ? "var(--muted)" : inkOn(fill)};pointer-events:none;font-size:11px;font-weight:600">${esc(isRate ? `${Math.round(v * 100)}%` : fmt(v))}</text>`;
+  });
+  el.innerHTML = s + `</svg>`;
+  bindTips(el);
+}
+function renderTrips(wl, reg) {
+  const M = curM();
+  const dayReg = new Map();
+  for (const f of wl) { const r = regionOf(reg, f), k = `${f.year}|${r.key}`; if (!dayReg.has(k)) dayReg.set(k, new Set()); dayReg.get(k).add(f.date); }
+  const home = {};
+  for (const [k, set] of dayReg) { const [y, rk] = k.split("|"); if (!home[y] || set.size > home[y].n) home[y] = { rk, n: set.size }; }
+  const isAway = (f) => home[f.year] && regionOf(reg, f).key !== home[f.year].rk;
+  const away = wl.filter(isAway).sort((a, b) => a.epoch - b.epoch), atHome = wl.filter((f) => !isAway(f));
+  const trips = [], open = new Map();
+  for (const f of away) {
+    const r = regionOf(reg, f), t = open.get(r.key);
+    if (t && dayNum(f.date) - dayNum(t.end) <= 5) { t.fl.push(f); t.end = f.date; }
+    else { const nt = { r, fl: [f], start: f.date, end: f.date }; trips.push(nt); open.set(r.key, nt); }
+  }
+  const awayDays = uniqDays(away), homeDays = uniqDays(atHome), ag = away.filter(isGood).length, hg = atHome.filter(isGood).length;
+  const st = (v, l) => `<div><b>${v}</b><small>${l}</small></div>`;
+  $("#tripStats").innerHTML = !wl.length ? "" :
+    st(trips.length, "trips away") +
+    st(`${awayDays}`, `flying days away, ${pct(awayDays, awayDays + homeDays)}% of all`) +
+    st(awayDays ? (ag / awayDays).toFixed(2) : "–", "good flights per flying day away") +
+    st(homeDays ? (hg / homeDays).toFixed(2) : "–", "good flights per flying day at home") +
+    st(away.length ? `${pct(ag, away.length)}%` : "–", "of flights good away") +
+    st(atHome.length ? `${pct(hg, atHome.length)}%` : "–", "of flights good at home");
+  const t = [...trips].sort((a, b) => b.start.localeCompare(a.start));
+  const tbl = $("#tTrips");
+  if (!t.length) { tbl.innerHTML = `<tbody><tr><td class="muted">No trips away with these filters.</td></tr></tbody>`; return; }
+  const shown = state.where.allTrips ? t : t.slice(0, 12);
+  tbl.innerHTML = `<thead><tr><th>Where</th><th>Dates</th><th class="n">Flying days</th><th class="n">Flights</th><th class="n">Airtime</th><th class="n">Good</th><th class="n">Best</th></tr></thead><tbody>` +
+    shown.map((x, i) => {
+      const s = siteStats(x.fl), air = x.fl.reduce((a, f) => a + f.airtime, 0);
+      return `<tr data-i="${i}"><td><span class="site">${esc(x.r.label)}</span>${x.r.country ? ` <span class="muted">${esc(x.r.country)}</span>` : ""}</td><td class="mono">${fmtRange(x.start, x.end)}</td><td class="n">${s.days}</td><td class="n">${s.n}</td><td class="n">${fmtH(air)}</td><td class="n">${s.good}</td><td class="n">${M.vfmt(M.get(s.best))}</td></tr>`;
+    }).join("") + `</tbody>` + (t.length > 12 ? `<tfoot><tr><td colspan="7"><button type="button" id="tripsMore">${state.where.allTrips ? "Show the latest 12" : `Show all ${t.length} trips`}</button></td></tr></tfoot>` : "");
+  if ($("#tripsMore")) $("#tripsMore").addEventListener("click", () => { state.where.allTrips = !state.where.allTrips; renderTrips(wl, reg); });
+  tbl.querySelectorAll("tbody tr").forEach((tr) => tr.addEventListener("click", () => { const x = shown[+tr.dataset.i]; const top = groupSites(x.fl).sort((a, b) => b.n - a.n)[0]; openSiteProfile(top.key); }));
+}
+function openSiteProfile(key) {
+  state.where.siteKey = key;
+  renderWhere(filtered());
+  const el = $("#siteProfile"); if (!el.hidden) el.scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" });
+}
+function renderSiteProfile(wl, reg) {
+  const key = state.where.siteKey, el = $("#siteProfile");
+  const fl = key ? wl.filter((f) => siteKey(f) === key) : [];
+  if (!fl.length) { el.hidden = true; return; }
+  el.hidden = false;
+  const M = curM(), s = siteStats(fl), r = reg.get(key), col = accentCol();
+  $("#spEyebrow").textContent = regionLine(r) || "Site profile";
+  $("#spTitle").textContent = siteLabel(fl[0]);
+  const st = (v, l) => `<div><b>${v}</b><small>${l}</small></div>`;
+  $("#spStats").innerHTML = st(s.n, `flights on ${s.days} days`) + st(s.years.length, `season${s.years.length === 1 ? "" : "s"}, ${s.years[0]}${s.years.length > 1 ? "–" + s.years[s.years.length - 1] : ""}`) +
+    st(`${pct(s.good, s.n)}%`, `good, ${s.good} of ${s.n}`) + st(`${pct(s.bomb, s.n)}%`, `bomb-outs, ${s.bomb} of ${s.n}`) +
+    st(fmtH(s.medAir), "median airtime") + st(M.vfmt(M.get(s.best)), `best, ${prettyDate(s.best.date)}`) +
+    st(s.goodHour == null ? "–" : hhmm(s.goodHour), "typical launch of good flights");
+  barChart($("#cSpMonths"), MONTHS.map((m, i) => {
+    const mf = fl.filter((f) => f.month === i + 1), g = mf.filter(isGood).length;
+    return { label: m.slice(0, 1), value: mf.length, color: mf.length ? cm(0.15 + 0.85 * (g / mf.length)) : "var(--line)", tip: `${MONTH_LONG[i]}<br><b>${mf.length}</b> flights · <b>${g}</b> good` };
+  }), { yFmt: (v) => +v.toFixed(1) });
+  scatterXY($("#cSpHour"), fl.map((f) => ({
+    x: f.hour, y: f.airtime / 3600, r: 5.5, color: col, filled: isGood(f), id: f.id,
+    tip: `${prettyDate(f.date)} · launched ${f.time}<br><b>${fmtH(f.airtime)}</b> h · <b>${fmtKm(f.xcKm)}</b> km${isGood(f) ? " · good" : isBomb(f) ? " · bomb-out" : ""}`,
+  })), { xFmt: (v) => hhmm(v), yFmt: (v) => fmtH(v * 3600), yZero: true, xLabel: "local takeoff time →", yLabel: "airtime h", onClick: (p) => openFlight(fl.find((f) => f.id === p.id), fl) });
+  const best = [...fl].sort((a, b) => M.get(b) - M.get(a)).slice(0, 10);
+  $("#tSpBest").innerHTML = flightRows(best); bindRows($("#tSpBest"), best);
+}
+function syncWhereControls() {
+  const W = state.where;
+  $("#gMeasure").value = W.measure; $("#gValue").value = W.value; $("#gUnit").textContent = curM().unit;
+  $("#bValue").value = W.bomb; $("#incTandem").checked = W.tandem; $("#calMetric").value = W.cal; $("#qualSel").value = W.qual || "good";
+}
+function saveWhere() { try { const { siteKey: _s, months: _m, allTrips: _t, ...keep } = state.where; localStorage.setItem("lt-where3", JSON.stringify(keep)); } catch (e) { /* ignore */ } }
+function renderWhere(list) {
+  const wl = whereFlights(list), reg = buildRegions(groupSites(state.flights));
+  syncWhereControls();
+  renderMonthChips(wl); renderCards(wl, reg); renderRel(wl); renderSiteCal(wl, reg); renderDow(wl); renderGoodHour(wl);
+  renderSiteProfile(wl, reg); renderRhythm(wl); renderTrips(wl, reg);
+}
+
+/* ---------- render ---------- */
+function renderFilters() {
+  const years = [...new Set(state.flights.map((f) => f.year))].sort((a, b) => b - a);
+  $("#fYear").innerHTML = `<option value="all">All years</option>` + years.map((y) => `<option value="${y}">${y}</option>`).join("");
+  $("#fYear").value = state.year;
+  const sites = groupSites(state.flights).sort((a, b) => b.n - a.n);
+  $("#fSite").innerHTML = `<option value="all">All sites (${sites.length})</option>` + sites.map((s) => `<option value="${esc(s.key)}">${esc(s.label)} (${s.n})</option>`).join("");
+  $("#fSite").value = state.site;
+  const gl = groupGliders(state.flights).sort((a, b) => b.air - a.air);
+  $("#fGlider").innerHTML = `<option value="all">All gliders (${gl.length})</option>` + gl.map((g) => `<option value="${esc(g.key)}">${esc(g.label)} · ${fmtHours(g.air)} h</option>`).join("");
+  $("#fGlider").value = state.glider;
+  $("#fReset").hidden = state.year === "all" && state.site === "all" && state.glider === "all";
+}
+function renderTiles(list) {
+  const air = list.reduce((a, f) => a + f.airtime, 0), km = list.reduce((a, f) => a + f.trackKm, 0);
+  const pick = (k) => list.reduce((a, f) => (!a || f[k] > a[k] ? f : a), null);
+  const longest = pick("airtime"), far = pick("xcKm"), high = pick("maxAlt");
+  const sites = groupSites(list).length, days = new Set(list.map((f) => f.date)).size, gl = groupGliders(list).length;
+  const t = (label, val, sub, f) => `<div class="tile"${f ? ` data-id="${esc(f.id)}" style="cursor:pointer"` : ""}><span class="eyebrow">${label}</span><b>${val}</b><small>${sub}</small></div>`;
+  $("#tiles").innerHTML = !list.length ? t("Flights", "0", "nothing matches these filters") :
+    t("Flights", list.length.toLocaleString(), `${days} flying day${days === 1 ? "" : "s"}`) +
+    t("Airtime", `${fmtHours(air)} h`, `avg ${fmtH(air / list.length)}`) +
+    t("Track flown", `${fmtKm(km)} km`, "along all tracks") +
+    t("Longest", fmtH(longest.airtime), `${prettyDate(longest.date)} · ${esc(siteLabel(longest))}`, longest) +
+    t("Furthest", `${fmtKm(far.xcKm)} km`, `${far.xc ? esc(far.xc.type) : "from launch"} · ${prettyDate(far.date)}`, far) +
+    t("Highest", `${fmtM(high.maxAlt)} m`, `${prettyDate(high.date)} · ${esc(siteLabel(high))}`, high) +
+    t("Sites · gliders", `${sites} · ${gl}`, `${new Set(list.map((f) => f.year)).size} seasons`);
+  $("#tiles").querySelectorAll("[data-id]").forEach((el) => el.addEventListener("click", () => openFlight(list.find((f) => f.id === el.dataset.id), list)));
+}
+function renderOverview(list) {
+  const years = [...new Set(state.flights.map((f) => f.year))].sort();
+  const byYear = years.map((y) => { const fl = list.filter((f) => f.year === y); const s = fl.reduce((a, f) => a + f.airtime, 0); return { label: years.length > 8 ? `'${String(y).slice(2)}` : String(y), value: s / 3600, year: y, on: state.year === String(y), tip: `${y}<br><b>${fmtH(s)}</b> h · ${fl.length} flights` }; });
+  barChart($("#cYears"), byYear, { yFmt: (v) => `${+v.toFixed(1)}`, onClick: (d) => { state.year = state.year === String(d.year) ? "all" : String(d.year); render(); } });
+  calendar($("#cCal"), list);
+  const hours = Array.from({ length: 24 }, (_, h) => ({ label: String(h).padStart(2, "0"), value: 0, h }));
+  list.forEach((f) => hours[Math.floor(f.hour) % 24].value++);
+  const used = hours.filter((h) => h.value).map((h) => h.h); const lo = used.length ? Math.max(0, Math.min(...used) - 1) : 6, hi = used.length ? Math.min(23, Math.max(...used) + 1) : 20;
+  barChart($("#cHour"), hours.slice(lo, hi + 1).map((h) => ({ ...h, tip: `${h.label}:00–${h.label}:59<br><b>${h.value}</b> flight${h.value === 1 ? "" : "s"}` })), { yFmt: (v) => +v.toFixed(1), labelEvery: hi - lo > 14 ? 2 : 1 });
+  const bins = [[0, 900, "<15m"], [900, 1800, "15–30m"], [1800, 3600, "30–60m"], [3600, 7200, "1–2h"], [7200, 10800, "2–3h"], [10800, 14400, "3–4h"], [14400, 18000, "4–5h"], [18000, 1e9, "5h+"]];
+  barChart($("#cDur"), bins.map(([a, b, l]) => { const n = list.filter((f) => f.airtime >= a && f.airtime < b).length; return { label: l, value: n, tip: `${l}<br><b>${n}</b> flight${n === 1 ? "" : "s"}` }; }), { yFmt: (v) => +v.toFixed(1) });
+  scatter($("#cScatter"), list);
+  const sites = groupSites(list).sort((a, b) => b.air - a.air).slice(0, 10);
+  hbarChart($("#cSites"), sites.map((s) => ({ label: s.label, value: s.air, valueLabel: `${fmtH(s.air)} h`, key: s.key, on: state.site === s.key, tip: `${esc(s.label)}<br><b>${s.n}</b> flights · <b>${fmtH(s.air)}</b> h · best ${fmtKm(s.best)} km` })), { onClick: (d) => { state.site = state.site === d.key ? "all" : d.key; render(); } });
+
+}
+function renderGliders(list) {
+  const gl = groupGliders(list).sort((a, b) => a.firstEpoch - b.firstEpoch);
+  lanes($("#cLanes"), gl);
+  const byHours = [...gl].sort((a, b) => b.air - a.air);
+  $("#tGliders").innerHTML = `<thead><tr><th>Glider</th><th class="n">Flights</th><th class="n">Airtime</th><th class="n">Avg</th><th class="n">Longest</th><th class="n">Best km</th><th>First flown</th><th>Last flown</th></tr></thead><tbody>` +
+    byHours.map((g) => `<tr data-k="${esc(g.key)}"><td><span class="site">${esc(g.label)}</span>${g.tandem ? `<span class="badge">tandem ${g.tandem}</span>` : ""}</td><td class="n">${g.n}</td><td class="n">${fmtH(g.air)}</td><td class="n">${fmtH(g.air / g.n)}</td><td class="n">${fmtH(g.longest)}</td><td class="n">${fmtKm(g.best)}</td><td class="mono">${g.first}</td><td class="mono">${g.last}</td></tr>`).join("") + `</tbody>`;
+  $("#tGliders").querySelectorAll("tbody tr").forEach((tr) => tr.addEventListener("click", () => { state.glider = state.glider === tr.dataset.k ? "all" : tr.dataset.k; render(); }));
+}
+function renderSites(list) {
+  const sites = groupSites(list).sort((a, b) => b.n - a.n || b.air - a.air);
+  $("#tSites").innerHTML = `<thead><tr><th>Site</th><th class="n">Flights</th><th class="n">Airtime</th><th class="n">Avg</th><th class="n">Best km</th><th class="n">Max alt m</th><th>First</th><th>Last</th></tr></thead><tbody>` +
+    sites.map((s) => `<tr data-key="${esc(s.key)}"><td><span class="site">${esc(s.label)}</span></td><td class="n">${s.n}</td><td class="n">${fmtH(s.air)}</td><td class="n">${fmtH(s.air / s.n)}</td><td class="n">${fmtKm(s.best)}</td><td class="n">${fmtM(s.maxAlt)}</td><td class="mono">${s.first}</td><td class="mono">${s.last}</td></tr>`).join("") + `</tbody>`;
+  $("#tSites").querySelectorAll("tbody tr").forEach((tr) => tr.addEventListener("click", () => { state.site = tr.dataset.key; render(); }));
+}
+function renderRecords(list) {
+  const cats = [
+    ["Longest airtime", (f) => f.airtime, (f) => fmtH(f.airtime) + " h"],
+    ["Furthest (XC km)", (f) => f.xcKm, (f) => fmtKm(f.xcKm) + " km"],
+    ["Highest", (f) => f.maxAlt, (f) => fmtM(f.maxAlt) + " m"],
+    ["Most height gained", (f) => f.gain, (f) => fmtM(f.gain) + " m"],
+    ["Strongest climb, 20 s average", (f) => f.maxClimb, (f) => "+" + f.maxClimb.toFixed(1) + " m/s"],
+    ["Most XC points", (f) => (f.xc ? f.xc.pts : 0), (f) => (f.xc ? f.xc.pts.toFixed(1) : "–") + " pts"],
+  ];
+  $("#records").innerHTML = cats.map(([title, key, val], ci) => {
+    const top = [...list].filter((f) => key(f) > 0).sort((a, b) => key(b) - key(a)).slice(0, 5);
+    return `<div class="panel"><header><h2>${title}</h2></header>${top.length ? `<ol>${top.map((f, i) => `<li data-id="${esc(f.id)}"><span class="rk">${i + 1}</span><span class="what">${esc(siteLabel(f))}<small>${prettyDate(f.date)}${f.glider ? " · " + esc(f.glider) : ""}</small></span><b>${val(f)}</b></li>`).join("")}</ol>` : `<p class="muted">${ci === 5 ? "Load your XContest CSVs to see scored points." : "No flights."}</p>`}</div>`;
+  }).join("");
+  $("#records").querySelectorAll("li").forEach((li) => li.addEventListener("click", () => openFlight(list.find((f) => f.id === li.dataset.id), list)));
+}
+const COLS = [
+  ["epoch", "Date", (f) => `<span class="mono">${f.date}</span> <span class="muted mono">${f.time}</span>`],
+  ["site", "Site", (f) => `<span class="site">${esc(siteLabel(f))}</span>`],
+  ["airtime", "Airtime", (f) => fmtH(f.airtime), true],
+  ["xcKm", "XC km", (f) => fmtKm(f.xcKm), true],
+  ["maxAlt", "Max alt m", (f) => fmtM(f.maxAlt), true],
+  ["gain", "Gain m", (f) => fmtM(f.gain), true],
+  ["maxClimb", "Climb m/s", (f) => f.maxClimb.toFixed(1), true],
+  ["glider", "Glider", (f) => esc(f.glider || "–") + (f.tandem ? `<span class="badge">tandem</span>` : "")],
+];
+function renderFlights(list) {
+  const q = state.q.trim().toLowerCase();
+  let rows = q ? list.filter((f) => `${siteLabel(f)} ${f.glider} ${f.date} ${f.xc ? f.xc.type : ""}`.toLowerCase().includes(q)) : [...list];
+  const { key, dir } = state.sort;
+  const val = (f) => (key === "site" ? siteLabel(f).toLowerCase() : key === "glider" ? (f.glider || "").toLowerCase() : f[key]);
+  rows.sort((a, b) => (val(a) > val(b) ? 1 : val(a) < val(b) ? -1 : 0) * dir);
+  state.list = rows;
+  $("#flightCount").textContent = `${rows.length} flight${rows.length === 1 ? "" : "s"}`;
+  $("#tFlights").innerHTML = `<thead><tr>${COLS.map(([k, l, , n]) => `<th class="sortable${n ? " n" : ""}" data-k="${k}"${k === key ? ` data-dir="${dir > 0 ? "↑" : "↓"}"` : ""}>${l}</th>`).join("")}</tr></thead><tbody>` +
+    rows.map((f, i) => `<tr data-i="${i}">${COLS.map(([, , fn, n]) => `<td${n ? ' class="n"' : ""}>${fn(f)}</td>`).join("")}</tr>`).join("") + `</tbody>`;
+  $("#tFlights").querySelectorAll("th").forEach((th) => th.addEventListener("click", () => { const k = th.dataset.k; state.sort = { key: k, dir: state.sort.key === k ? -state.sort.dir : (k === "site" || k === "glider" ? 1 : -1) }; renderFlights(filtered()); }));
+  $("#tFlights").querySelectorAll("tbody tr").forEach((tr) => tr.addEventListener("click", () => openFlight(rows[+tr.dataset.i], rows)));
+}
+let mainMap = null, lastFitKey = "";
+function renderMap(list) {
+  if (!mainMap) return;
+  buildHeat(list);
+  mainMap.set(list, groupSites(list));
+  const key = `${state.year}|${state.site}|${state.glider}|${state.flights.length}`;
+  if (key !== lastFitKey) { lastFitKey = key; mainMap.fit(list); } else mainMap.queue();
+  const names = [state.site !== "all" && list[0] && siteLabel(list[0]), state.glider !== "all" && list[0] && gliderLabel(list[0]), state.year !== "all" && state.year].filter(Boolean);
+  $("#cbLabel").textContent = state.mapMode === "heat" ? "time in the air" : "max alt";
+  if (state.mapMode === "heat") { $("#cbLo").textContent = "less"; $("#cbHi").textContent = "more"; }
+  else if (list.length) { $("#cbLo").textContent = fmtM(Math.min(...list.map((f) => f.minAlt ?? f.launchAlt))); $("#cbHi").textContent = `${fmtM(Math.max(...list.map((f) => f.maxAlt)))} m`; }
+  $("#mapEyebrow").textContent = `${list.length} track${list.length === 1 ? "" : "s"}${state.sample ? " · examples" : ""}`;
+  $("#mapTitle").textContent = names.length ? names.join(" · ") : "All flights";
+}
+function render() {
+  renderFilters();
+  const list = filtered();
+  $("#sampleBanner").hidden = !state.sample;
+  document.querySelectorAll("nav.pages button").forEach((b) => b.setAttribute("aria-current", b.dataset.page === state.page ? "page" : "false"));
+  ["dash", "explore", "where"].forEach((p) => { $(`#page-${p}`).hidden = p !== state.page; });
+  if (state.page === "explore") renderDive(list);
+  else if (state.page === "where") renderWhere(list);
+  else {
+    renderTiles(list);
+    if (mainMap) mainMap.invalidate();
+    renderMap(list);
+    ["overview", "gliders", "sites", "records", "flights"].forEach((t) => { $(`#view-${t}`).hidden = t !== state.tab; $(`#tab-${t}`).setAttribute("aria-selected", t === state.tab); });
+    if (state.tab === "overview") renderOverview(list);
+    if (state.tab === "gliders") renderGliders(list);
+    if (state.tab === "sites") renderSites(list);
+    if (state.tab === "records") renderRecords(list);
+    if (state.tab === "flights") renderFlights(list);
+  }
+  try { localStorage.setItem("lt-tab", state.tab); } catch (e) { /* ignore */ }
+}
+function setPage(p) {
+  if (!["dash", "explore", "where"].includes(p)) p = "dash";
+  if (p === "dash" && state.page !== "dash") lastFitKey = "";
+  state.page = p;
+  try { localStorage.setItem("lt-page", p); } catch (e) { /* ignore */ }
+  try { history.replaceState(null, "", p === "dash" ? location.pathname + location.search : `#${p}`); } catch (e) { /* ignore */ }
+  hideTip(); render(); window.scrollTo(0, 0);
+}
+
+/* ---------- flight detail ---------- */
+let detailMap = null;
+/* ---------- linked cursor: the glider on the map and on the altitude chart ---------- */
+let cursorI = null, altGeom = null;
+function nearestByTime(tr, t) { let lo = 0, hi = tr.length - 1; while (hi - lo > 1) { const m = (lo + hi) >> 1; if (tr[m][3] < t) lo = m; else hi = m; } return t - tr[lo][3] < tr[hi][3] - t ? lo : hi; }
+function setCursor(i) {
+  const f = state.open; if (!f) return;
+  cursorI = Math.max(0, Math.min(f.track.length - 1, i));
+  drawAlt(f);
+  if (detailMap) detailMap.setMarker(f.track[cursorI]);
+  const tr = f.track, p = tr[cursorI], a = tr[Math.max(0, cursorI - 1)], b = tr[Math.min(tr.length - 1, cursorI + 1)], dt = Math.max(1, b[3] - a[3]);
+  const vz = (b[2] - a[2]) / dt, v = dist(a[0], a[1], b[0], b[1]) * 3600 / dt, fromL = dist(tr[0][0], tr[0][1], p[0], p[1]);
+  const clock = new Date(f.epoch + (f.offset + p[3]) * 1000), hh = String(clock.getUTCHours()).padStart(2, "0"), mm = String(clock.getUTCMinutes()).padStart(2, "0");
+  $("#dReadout").innerHTML = `<span><b>${hh}:${mm}</b> (+${fmtH(p[3])})</span><span><b>${fmtM(p[2])}</b> m</span><span><b>${vz >= 0 ? "+" : ""}${vz.toFixed(1)}</b> m/s</span><span><b>${v.toFixed(0)}</b> km/h</span><span><b>${fmtKm(fromL)}</b> km from launch</span>`;
+}
+function drawAlt(f) {
+  const cv = $("#dAlt"), dpr = window.devicePixelRatio || 1, w = cv.clientWidth;
+  cv.style.height = Math.min(400, Math.max(240, w * 0.75)) + "px";
+  const h = cv.clientHeight; cv.width = w * dpr; cv.height = h * dpr;
+  const ctx = cv.getContext("2d"); ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.fillStyle = css("--bg"); ctx.fillRect(0, 0, w, h);
+  const tr = f.track, ml = 46, mb = 22, mt = 14, mr = 12, iw = w - ml - mr, ih = h - mt - mb;
+  const a0 = Math.min(...tr.map((p) => p[2])), a1 = Math.max(...tr.map((p) => p[2]));
+  const lo = Math.floor(a0 / 100) * 100, { max: span, step } = niceMax(Math.max(100, a1 - lo), 4), hi = lo + span;
+  const T = Math.max(1, tr[tr.length - 1][3]);
+  const X = (t) => ml + (t / T) * iw, Y = (a) => mt + ih - ((a - lo) / (hi - lo)) * ih;
+  ctx.font = `11px ${css("--font-data")}`; ctx.fillStyle = css("--muted"); ctx.strokeStyle = css("--line"); ctx.lineWidth = 1;
+  for (let v = lo; v <= hi + 1e-6; v += step) { const y = Y(v); ctx.beginPath(); ctx.moveTo(ml, y); ctx.lineTo(w - mr, y); ctx.stroke(); ctx.textAlign = "right"; ctx.fillText(Math.round(v), ml - 6, y + 4); }
+  const tStep = [300, 600, 900, 1800, 3600, 7200].find((s) => T / s <= 7) || 7200;
+  ctx.textAlign = "center";
+  for (let t = 0; t <= T; t += tStep) ctx.fillText(fmtH(t), X(t), h - 6);
+  // gradient keyed to the same altitude scale as the map
+  const aLo = detailMap ? detailMap.aLo : a0, aHi = detailMap ? detailMap.aHi : a1;
+  const g = ctx.createLinearGradient(0, Y(aLo), 0, Y(aHi));
+  for (let i = 0; i <= 8; i++) g.addColorStop(i / 8, cm(i / 8));
+  ctx.beginPath(); ctx.moveTo(X(0), Y(lo)); tr.forEach((p) => ctx.lineTo(X(p[3]), Y(p[2]))); ctx.lineTo(X(T), Y(lo)); ctx.closePath();
+  ctx.globalAlpha = 0.16; ctx.fillStyle = g; ctx.fill(); ctx.globalAlpha = 1;
+  ctx.beginPath(); tr.forEach((p, i) => (i ? ctx.lineTo(X(p[3]), Y(p[2])) : ctx.moveTo(X(p[3]), Y(p[2])))); ctx.strokeStyle = g; ctx.lineWidth = 2; ctx.stroke();
+  const top = tr.reduce((a, p) => (p[2] > a[2] ? p : a));
+  ctx.fillStyle = css("--ink"); ctx.beginPath(); ctx.arc(X(top[3]), Y(top[2]), 3.5, 0, 7); ctx.fill();
+  ctx.textAlign = X(top[3]) > w - 80 ? "right" : "left"; ctx.fillText(`${fmtM(top[2])} m`, X(top[3]) + (ctx.textAlign === "right" ? -8 : 8), Math.max(mt + 10, Y(top[2]) - 6));
+  altGeom = { ml, iw, T };
+  if (cursorI !== null && tr[cursorI]) {
+    const p = tr[cursorI], cx = X(p[3]), cy = Y(p[2]);
+    ctx.strokeStyle = css("--ink"); ctx.lineWidth = 1; ctx.setLineDash([3, 3]);
+    ctx.beginPath(); ctx.moveTo(cx, mt); ctx.lineTo(cx, mt + ih); ctx.stroke(); ctx.setLineDash([]);
+    ctx.beginPath(); ctx.arc(cx, cy, 6.5, 0, 7); ctx.fillStyle = cm(0.15 + 0.85 * (p[2] - aLo) / Math.max(1, aHi - aLo)); ctx.fill();
+    ctx.lineWidth = 2.5; ctx.strokeStyle = css("--ink"); ctx.stroke();
+  }
+}
+function drawDetail() {
+  const f = state.open; if (!f) return;
+  if (!detailMap) detailMap = makeView($("#dTrack"), { detail: true });
+  detailMap.invalidate();
+  detailMap.set([f]); detailMap.fit([f]);
+  if (detailMap.draw) detailMap.draw();
+  drawAlt(f);
+}
+function openFlight(f, list) {
+  if (!f) return;
+  state.open = f; state.openList = list || state.list || [f];
+  const ord = [...state.openList].sort((a, b) => a.epoch - b.epoch), i = ord.indexOf(f);
+  $("#dPrev").disabled = i <= 0; $("#dNext").disabled = i < 0 || i >= ord.length - 1;
+  $("#dEyebrow").textContent = `${DOW[f.dow]} ${prettyDate(f.date)} · takeoff ${f.time}${f.offsetGuess ? " (approx. local)" : ""}`;
+  $("#dTitle").textContent = siteLabel(f);
+  $("#dSub").innerHTML = [f.glider && esc(f.glider), f.tandem && "tandem", f.xc && `${esc(f.xc.type)} ${fmtKm(f.xc.km)} km · ${f.xc.pts.toFixed(1)} pts`, f.xc && f.xc.link && `<a href="${esc(f.xc.link)}" target="_blank" rel="noopener">open on XContest</a>`, f.file !== "example" && esc(f.file)].filter(Boolean).join(" · ");
+  const st = [["Airtime", fmtH(f.airtime) + " h"], ["XC distance", f.xc ? fmtKm(f.xc.km) + " km" : "–"], ["Furthest from launch", fmtKm(f.maxDistKm) + " km"], ["Launch → landing", fmtKm(f.straightKm) + " km"], ["Track length", fmtKm(f.trackKm) + " km"], ["Launch alt", fmtM(f.launchAlt) + " m"], ["Max alt", fmtM(f.maxAlt) + " m"], ["Height gained", fmtM(f.gain) + " m"], ["Best climb", "+" + f.maxClimb.toFixed(1) + " m/s"], ["Worst sink", f.maxSink.toFixed(1) + " m/s"], ["Avg speed", (f.trackKm / Math.max(1, f.airtime / 3600)).toFixed(1) + " km/h"]];
+  $("#dStats").innerHTML = st.map(([l, v]) => `<div><span class="eyebrow">${l}</span><b>${v}</b></div>`).join("");
+  $("#dTrackNote").textContent = `${fmtKm(f.trackKm)} km of track · drag or scroll to explore`;
+  resetDelete();
+  cursorI = null; if (detailMap) detailMap.setMarker(null);
+  $("#dReadout").textContent = "Move along the altitude chart or the track to follow the glider.";
+  $("#sheet").hidden = false; document.body.style.overflow = "hidden";
+  requestAnimationFrame(drawDetail);
+  $("#dClose").focus();
+}
+/* deleting a flight: removed from the logbook and remembered, so re-loading the same folder won't bring it back */
+function resetDelete() {
+  $("#delBox").innerHTML = `<button id="dDelete" type="button">Delete flight</button>`;
+  $("#dDelete").addEventListener("click", () => {
+    $("#delBox").innerHTML = `<span>Delete this flight?</span><button id="dDelYes" type="button">Delete</button><button id="dDelNo" type="button">Cancel</button>`;
+    $("#dDelYes").addEventListener("click", deleteOpen);
+    $("#dDelNo").addEventListener("click", resetDelete);
+  });
+}
+function deleteOpen() {
+  const f = state.open; if (!f) return;
+  const ord = [...state.openList].sort((a, b) => a.epoch - b.epoch), i = ord.indexOf(f);
+  state.flights = state.flights.filter((x) => x !== f);
+  state.openList = state.openList.filter((x) => x !== f);
+  if (!state.sample) state.deleted.push({ id: f.id, e: f.epoch, lat: f.lat, lon: f.lon });
+  save();
+  const label = `${prettyDate(f.date)} · ${siteLabel(f)}`;
+  $("#status").innerHTML = `Deleted ${esc(label)}. <button id="undoDel" type="button">Undo</button>`;
+  $("#undoDel").addEventListener("click", () => {
+    state.flights.push(f); state.flights.sort((a, b) => a.epoch - b.epoch);
+    state.deleted = state.deleted.filter((d) => (typeof d === "string" ? d !== f.id : d.id !== f.id)); save();
+    setStatus(`Restored ${label}.`); lastFitKey = ""; render();
+  });
+  lastFitKey = ""; render();
+  const next = ord[i + 1] || ord[i - 1];
+  if (next && state.flights.includes(next)) openFlight(next, state.openList); else closeSheet();
+}
+function step(d) {
+  const ord = [...state.openList].sort((a, b) => a.epoch - b.epoch), i = ord.indexOf(state.open);
+  if (ord[i + d]) openFlight(ord[i + d], state.openList);
+}
+function closeSheet() { $("#sheet").hidden = true; document.body.style.overflow = ""; state.open = null; hideTip(); }
+function redrawOpen() { if (mainMap) mainMap.queue(); if (state.open) drawDetail(); }
+
+/* ---------- events ---------- */
+(() => {
+  const cv = $("#dAlt");
+  const move = (e) => {
+    const f = state.open; if (!f || !altGeom) return;
+    const r = cv.getBoundingClientRect(), t = ((e.clientX - r.left) - altGeom.ml) / altGeom.iw * altGeom.T;
+    setCursor(nearestByTime(f.track, Math.max(0, Math.min(altGeom.T, t))));
+  };
+  cv.addEventListener("pointerdown", (e) => { cv.setPointerCapture(e.pointerId); move(e); });
+  cv.addEventListener("pointermove", (e) => { if (e.pointerType === "mouse" || e.buttons) move(e); });
+})();
+$("#pickFolder").addEventListener("change", (e) => { loadFiles(e.target.files); e.target.value = ""; });
+$("#pickFiles").addEventListener("change", (e) => { loadFiles(e.target.files); e.target.value = ""; });
+$("#fYear").addEventListener("change", (e) => { state.year = e.target.value; render(); });
+$("#fSite").addEventListener("change", (e) => { state.site = e.target.value; render(); });
+$("#fGlider").addEventListener("change", (e) => { state.glider = e.target.value; render(); });
+$("#fReset").addEventListener("click", () => { state.year = "all"; state.site = "all"; state.glider = "all"; render(); });
+document.querySelectorAll("nav.tabs button").forEach((b) => b.addEventListener("click", () => { state.tab = b.dataset.tab; render(); }));
+$("#q").addEventListener("input", (e) => { state.q = e.target.value; renderFlights(filtered()); });
+$("#dClose").addEventListener("click", closeSheet);
+$("#dPrev").addEventListener("click", () => step(-1));
+$("#dNext").addEventListener("click", () => step(1));
+$("#sheet").addEventListener("click", (e) => { if (e.target.id === "sheet") closeSheet(); });
+document.addEventListener("keydown", (e) => { if (!state.open) return; if (e.key === "Escape") closeSheet(); if (e.key === "ArrowLeft") step(-1); if (e.key === "ArrowRight") step(1); });
+$("#mIn").addEventListener("click", () => mainMap.zoomBy(2));
+$("#mOut").addEventListener("click", () => mainMap.zoomBy(0.5));
+document.querySelectorAll("nav.pages button").forEach((b) => b.addEventListener("click", () => setPage(b.dataset.page)));
+const whereChange = () => { saveWhere(); renderWhere(filtered()); };
+$("#gMeasure").addEventListener("change", (e) => { state.where.measure = e.target.value; state.where.value = curM().def; whereChange(); });
+$("#gValue").addEventListener("change", (e) => { const v = parseFloat(e.target.value); if (isFinite(v) && v >= 0) state.where.value = v; whereChange(); });
+$("#bValue").addEventListener("change", (e) => { const v = parseFloat(e.target.value); if (isFinite(v) && v > 0) state.where.bomb = v; whereChange(); });
+$("#incTandem").addEventListener("change", (e) => { state.where.tandem = e.target.checked; whereChange(); });
+$("#qualSel").addEventListener("change", (e) => { state.where.qual = e.target.value; whereChange(); });
+$("#calMetric").addEventListener("change", (e) => { state.where.cal = e.target.value; whereChange(); });
+$("#spClose").addEventListener("click", () => { state.where.siteKey = null; $("#siteProfile").hidden = true; });
+$("#spDash").addEventListener("click", () => { state.site = state.where.siteKey; setPage("dash"); });
+$("#diveSel").addEventListener("change", (e) => { state.dive = e.target.value; try { localStorage.setItem("lt-dive", state.dive); } catch (err) { /* ignore */ } renderDive(filtered()); });
+$("#scX").addEventListener("change", (e) => { state.scX = e.target.value; try { localStorage.setItem("lt-scx", state.scX); } catch (err) { /* ignore */ } scatter($("#cScatter"), filtered()); });
+$("#scY").addEventListener("change", (e) => { state.scY = e.target.value; try { localStorage.setItem("lt-scy", state.scY); } catch (err) { /* ignore */ } scatter($("#cScatter"), filtered()); });
+$("#scColor").addEventListener("change", (e) => { state.dotColor = e.target.value; try { localStorage.setItem("lt-dotc", state.dotColor); } catch (err) { /* ignore */ } scatter($("#cScatter"), filtered()); });
+$("#scSize").addEventListener("change", (e) => { state.dotSize = e.target.value; try { localStorage.setItem("lt-dots", state.dotSize); } catch (err) { /* ignore */ } scatter($("#cScatter"), filtered()); });
+$("#modeSel").addEventListener("change", (e) => {
+  state.mapMode = e.target.value; try { localStorage.setItem("lt-mode", state.mapMode); } catch (err) { /* ignore */ }
+  render();
+});
+$("#baseSel").addEventListener("change", (e) => {
+  state.basemap = e.target.value; try { localStorage.setItem("lt-base", state.basemap); } catch (err) { /* ignore */ }
+  mainMap.setBase(); if (detailMap) detailMap.setBase();
+});
+$("#mFit").addEventListener("click", () => mainMap.fit(filtered()));
+function bindClear() {
+  $("#clearBtn").addEventListener("click", () => {
+    $("#clearBox").innerHTML = `<span>Remove all flights from this browser?</span><button id="clearYes" type="button">Remove</button><button id="clearNo" type="button">Keep</button>`;
+    $("#clearYes").addEventListener("click", async () => { await wipe(); state.flights = makeSample(); state.csvRows = []; state.deleted = []; state.sample = true; lsSet("pg-dbx-seen", null); state.year = "all"; state.site = "all"; state.glider = "all"; setStatus("Removed your flights from this browser."); resetClear(); render(); });
+    $("#clearNo").addEventListener("click", resetClear);
+  });
+}
+function resetClear() { $("#clearBox").innerHTML = `<button id="clearBtn" type="button">Clear</button>`; bindClear(); }
+bindClear();
+let dragDepth = 0;
+window.addEventListener("dragenter", (e) => { e.preventDefault(); dragDepth++; $("#dropHint").hidden = false; });
+window.addEventListener("dragleave", () => { if (--dragDepth <= 0) { dragDepth = 0; $("#dropHint").hidden = true; } });
+window.addEventListener("dragover", (e) => e.preventDefault());
+window.addEventListener("drop", async (e) => {
+  e.preventDefault(); dragDepth = 0; $("#dropHint").hidden = true;
+  const out = [], items = [...(e.dataTransfer.items || [])];
+  if (items.length && items[0].webkitGetAsEntry) { const entries = items.map((it) => it.webkitGetAsEntry()).filter(Boolean); for (const en of entries) await walkEntry(en, out); }
+  else out.push(...e.dataTransfer.files);
+  loadFiles(out);
+});
+const onTheme = () => { if (state.basemap === "auto" && mainMap) { mainMap.setBase(); if (detailMap) detailMap.setBase(); } applyStyle(state.style); };
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", onTheme);
+new MutationObserver(onTheme).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+window.addEventListener("resize", () => { clearTimeout(window.__rz); window.__rz = setTimeout(redrawOpen, 120); });
+
+
+/* ---------- Dropbox sync (online version only) ----------
+   Uses the Dropbox HTTP API directly with OAuth PKCE, so no server and no secret are involved.
+   The app key and the sign-in stay in this browser. With an "App folder" Dropbox app, the logbook
+   can only see Dropbox → Apps → <your app's name>. */
+const lsGet = (k) => { try { return localStorage.getItem(k); } catch (e) { return null; } };
+const lsSet = (k, v) => { try { if (v == null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch (e) { /* ignore */ } };
+const dbxAvailable = () => (location.protocol === "https:" || location.hostname === "localhost") && !/claude|anthropic/i.test(location.hostname);
+const dbxRedirect = () => location.origin + location.pathname.replace(/index\.html$/, "");
+const dbxConnected = () => !!(lsGet("pg-dbx-key") && lsGet("pg-dbx-refresh"));
+const isStandalone = () => matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+const b64url = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+const hdrJson = (o) => JSON.stringify(o).replace(/[\u007f-￿]/g, (ch) => "\\u" + ch.charCodeAt(0).toString(16).padStart(4, "0"));
+let dbxTok = null, dbxBusy = false;
+
+async function dbxStartAuth(appKey, pasteCode) {
+  const verifier = b64url(crypto.getRandomValues(new Uint8Array(48)));
+  const challenge = b64url(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier)));
+  lsSet("pg-dbx-key", appKey); lsSet("pg-dbx-verifier", verifier); lsSet("pg-dbx-mode", pasteCode ? "paste" : "redirect");
+  const q = { client_id: appKey, response_type: "code", code_challenge: challenge, code_challenge_method: "S256", token_access_type: "offline" };
+  if (!pasteCode) q.redirect_uri = dbxRedirect();
+  const url = `https://www.dropbox.com/oauth2/authorize?${new URLSearchParams(q)}`;
+  if (pasteCode) window.open(url, "_blank", "noopener"); else location.href = url;
+}
+async function dbxExchange(code) {
+  const body = { code, grant_type: "authorization_code", client_id: lsGet("pg-dbx-key"), code_verifier: lsGet("pg-dbx-verifier") || "" };
+  if (lsGet("pg-dbx-mode") !== "paste") body.redirect_uri = dbxRedirect();
+  const r = await fetch("https://api.dropboxapi.com/oauth2/token", { method: "POST", body: new URLSearchParams(body) });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok || !j.refresh_token) throw new Error(j.error_description || j.error || `Dropbox sign-in failed (${r.status})`);
+  lsSet("pg-dbx-refresh", j.refresh_token); lsSet("pg-dbx-verifier", null);
+  dbxTok = { t: j.access_token, exp: Date.now() + (j.expires_in - 60) * 1000 };
+}
+async function dbxAccess() {
+  if (dbxTok && dbxTok.exp > Date.now()) return dbxTok.t;
+  const r = await fetch("https://api.dropboxapi.com/oauth2/token", { method: "POST", body: new URLSearchParams({ grant_type: "refresh_token", refresh_token: lsGet("pg-dbx-refresh") || "", client_id: lsGet("pg-dbx-key") || "" }) });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) { if (j.error === "invalid_grant") lsSet("pg-dbx-refresh", null); throw new Error(j.error === "invalid_grant" ? "Dropbox access was revoked. Connect again." : j.error_description || `Dropbox error (${r.status})`); }
+  dbxTok = { t: j.access_token, exp: Date.now() + (j.expires_in - 60) * 1000 };
+  return dbxTok.t;
+}
+async function dbxApi(path, body) {
+  const r = await fetch(`https://api.dropboxapi.com/2/${path}`, { method: "POST", headers: { Authorization: `Bearer ${await dbxAccess()}`, "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  if (!r.ok) throw new Error(`Dropbox: ${(await r.text()).slice(0, 160)}`);
+  return r.json();
+}
+async function dbxDownload(entry) {
+  const r = await fetch("https://content.dropboxapi.com/2/files/download", { method: "POST", headers: { Authorization: `Bearer ${await dbxAccess()}`, "Dropbox-API-Arg": hdrJson({ path: entry.id }) } });
+  if (!r.ok) throw new Error(`Dropbox download failed for ${entry.name}`);
+  return new File([await r.blob()], entry.name);
+}
+async function dbxSync(quiet) {
+  if (dbxBusy || !dbxConnected()) return;
+  dbxBusy = true; renderDbx();
+  try {
+    setStatus("Checking Dropbox for flights…");
+    let res = await dbxApi("files/list_folder", { path: "", recursive: true, limit: 2000 }), entries = res.entries;
+    while (res.has_more) { res = await dbxApi("files/list_folder/continue", { cursor: res.cursor }); entries = entries.concat(res.entries); }
+    const files = entries.filter((e) => e[".tag"] === "file" && /\.(igc|csv)$/i.test(e.name));
+    let seen = {}; try { seen = JSON.parse(lsGet("pg-dbx-seen") || "{}"); } catch (e) { seen = {}; }
+    if (state.sample) seen = {};
+    // CSVs first so new flights get their launch names
+    const todo = files.filter((e) => seen[e.path_lower] !== e.content_hash).sort((a, b) => /\.csv$/i.test(b.name) - /\.csv$/i.test(a.name));
+    if (!todo.length) {
+      lsSet("pg-dbx-last", String(Date.now()));
+      setStatus(files.length ? `Dropbox is up to date: ${files.filter((e) => /\.igc$/i.test(e.name)).length} IGC files, nothing new.` : "Your Dropbox app folder is empty. Put your IGC files and XContest CSVs in Dropbox → Apps → your app's folder, then sync.");
+      return;
+    }
+    const got = [];
+    for (let i = 0; i < todo.length; i += 6) {
+      setStatus(`Downloading from Dropbox… ${i} of ${todo.length}`);
+      got.push(...(await Promise.all(todo.slice(i, i + 6).map(dbxDownload))));
+    }
+    await loadFiles(got);
+    for (const e of todo) seen[e.path_lower] = e.content_hash;
+    lsSet("pg-dbx-seen", JSON.stringify(seen)); lsSet("pg-dbx-last", String(Date.now()));
+    setStatus(`From Dropbox: ${$("#status").textContent}`);
+  } catch (e) {
+    setStatus(`Dropbox sync didn't work: ${e.message}`);
+  } finally { dbxBusy = false; renderDbx(); }
+}
+function renderDbx() {
+  const btn = $("#dbxBtn"), box = $("#dbxBox");
+  if (!dbxAvailable()) { btn.hidden = true; box.hidden = true; return; }
+  btn.hidden = false;
+  btn.textContent = dbxBusy ? "Syncing…" : dbxConnected() ? "Sync Dropbox" : "Connect Dropbox";
+  btn.disabled = dbxBusy;
+  if (box.hidden) return;
+  if (dbxConnected()) {
+    const last = +lsGet("pg-dbx-last");
+    box.innerHTML = `<div class="dbx"><b>Dropbox is connected.</b> Your IGC files and XContest CSVs go in <b>Dropbox → Apps → your app's folder</b>. The logbook syncs every time it opens.${last ? ` Last checked ${new Date(last).toLocaleString()}.` : ""}
+      <span class="actions"><button type="button" id="dbxSyncNow">Sync now</button><button type="button" id="dbxOff">Disconnect this device</button><button type="button" id="dbxClose">Close</button></span></div>`;
+    $("#dbxSyncNow").addEventListener("click", () => dbxSync(false));
+    $("#dbxOff").addEventListener("click", () => { lsSet("pg-dbx-refresh", null); lsSet("pg-dbx-seen", null); dbxTok = null; setStatus("Disconnected this device from Dropbox. Your flights stay in the logbook."); renderDbx(); });
+    $("#dbxClose").addEventListener("click", () => { box.hidden = true; });
+    return;
+  }
+  const paste = isStandalone();
+  box.innerHTML = `<div class="dbx"><b>Connect your Dropbox</b>
+    <label for="dbxKey">Dropbox app key <input id="dbxKey" type="text" autocomplete="off" spellcheck="false" value="${esc(lsGet("pg-dbx-key") || "")}" placeholder="e.g. a1b2c3d4e5f6g7h"></label>
+    <span class="note">In the Dropbox App Console, add this redirect URI to your app: <code id="dbxUri">${esc(dbxRedirect())}</code> <button type="button" id="dbxCopy">Copy</button></span>
+    <span class="actions"><button type="button" class="btn primary" id="dbxGo">${paste ? "Open Dropbox sign-in" : "Connect Dropbox"}</button><button type="button" id="dbxClose">Close</button></span>
+    <div id="dbxPaste" ${paste && lsGet("pg-dbx-mode") === "paste" && lsGet("pg-dbx-verifier") ? "" : "hidden"}><label for="dbxCode">Paste the code Dropbox shows you <input id="dbxCode" type="text" autocomplete="off" spellcheck="false"></label> <button type="button" id="dbxFinish">Finish</button></div></div>`;
+  $("#dbxCopy").addEventListener("click", async () => { try { await navigator.clipboard.writeText(dbxRedirect()); $("#dbxCopy").textContent = "Copied"; } catch (e) { const r = document.createRange(); r.selectNodeContents($("#dbxUri")); const s = getSelection(); s.removeAllRanges(); s.addRange(r); } });
+  $("#dbxClose").addEventListener("click", () => { box.hidden = true; });
+  $("#dbxGo").addEventListener("click", async () => {
+    const k = $("#dbxKey").value.trim();
+    if (!/^[a-z0-9]{8,}$/i.test(k)) { setStatus("Paste the app key from the Dropbox App Console (Settings tab) first."); $("#dbxKey").focus(); return; }
+    await dbxStartAuth(k, paste);
+    if (paste) $("#dbxPaste").hidden = false;
+  });
+  $("#dbxFinish").addEventListener("click", async () => {
+    const code = $("#dbxCode").value.trim(); if (!code) return;
+    try { await dbxExchange(code); setStatus("Dropbox connected."); renderDbx(); dbxSync(false); } catch (e) { setStatus(e.message); }
+  });
+}
+async function dbxBoot() {
+  renderDbx();
+  if (!dbxAvailable()) return;
+  $("#dbxBtn").addEventListener("click", () => { if (dbxConnected() && $("#dbxBox").hidden) dbxSync(false); $("#dbxBox").hidden = false; renderDbx(); });
+  const q = new URLSearchParams(location.search);
+  if (q.get("code") || q.get("error")) {
+    history.replaceState(null, "", location.pathname + location.hash);
+    if (q.get("error")) { setStatus(`Dropbox sign-in was cancelled (${q.get("error_description") || q.get("error")}).`); return; }
+    try { await dbxExchange(q.get("code")); setStatus("Dropbox connected."); } catch (e) { setStatus(e.message); $("#dbxBox").hidden = false; renderDbx(); return; }
+  }
+  if (dbxConnected()) dbxSync(true);
+}
+
+/* ---------- start ---------- */
+(async () => {
+  try { const t = localStorage.getItem("lt-tab"); if (t && document.getElementById(`view-${t}`)) state.tab = t; } catch (e) { /* ignore */ }
+  let st = "mono"; try { st = localStorage.getItem("lt-style") || "mono"; } catch (e) { /* ignore */ }
+  try { state.basemap = localStorage.getItem("lt-base") || "auto"; } catch (e) { state.basemap = "auto"; }
+  try { state.mapMode = localStorage.getItem("lt-mode") || "tracks"; } catch (e) { state.mapMode = "tracks"; }
+  $("#modeSel").value = state.mapMode;
+  try { state.dotColor = localStorage.getItem("lt-dotc") || "maxAlt"; state.dotSize = localStorage.getItem("lt-dots") || "none"; } catch (e) { state.dotColor = "maxAlt"; state.dotSize = "none"; }
+  const opts = DOT_PARAMS.map(([k, n]) => `<option value="${k}">${n}</option>`).join("");
+  $("#scColor").innerHTML = opts; $("#scSize").innerHTML = opts;
+  $("#scColor").value = state.dotColor; $("#scSize").value = state.dotSize;
+  try { state.scX = localStorage.getItem("lt-scx") || "xcKm"; state.scY = localStorage.getItem("lt-scy") || "airtime"; } catch (e) { state.scX = "xcKm"; state.scY = "airtime"; }
+  const axOpts = axisParams().map(([k, n]) => `<option value="${k}">${n}</option>`).join("");
+  $("#scX").innerHTML = axOpts; $("#scY").innerHTML = axOpts;
+  $("#scX").value = state.scX; $("#scY").value = state.scY;
+  try { state.dive = localStorage.getItem("lt-dive") || "maxClimb"; } catch (e) { state.dive = "maxClimb"; }
+  $("#diveSel").innerHTML = DIVE_PARAMS.map(([k, n]) => `<option value="${k}">${n}</option>`).join("");
+  $("#diveSel").value = state.dive;
+  $("#baseSel").innerHTML = BASEMAPS.map(([k, n]) => `<option value="${k}">${n}</option>`).join("");
+  $("#baseSel").value = state.basemap;
+  if (!window.L) $("#baseSel").closest("label").hidden = true;
+  const nowM = new Date().getMonth() + 1;
+  state.where = { measure: "airtime", value: 120, bomb: 60, tandem: false, cal: "air", months: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12], siteKey: null };
+  try { Object.assign(state.where, JSON.parse(localStorage.getItem("lt-where3") || "{}")); } catch (e) { /* ignore */ }
+  if (!MEASURES[state.where.measure]) state.where.measure = "airtime";
+  try { state.page = localStorage.getItem("lt-page") || "dash"; } catch (e) { state.page = "dash"; }
+  const hp = (location.hash || "").slice(1); if (["dash", "explore", "where"].includes(hp)) state.page = hp;
+  if (!["dash", "explore", "where"].includes(state.page)) state.page = "dash";
+  mainMap = makeView($("#map"), {});
+  applyStyle(st, false);
+  state.flights = makeSample(); state.sample = true; render();
+  if (!window.L) loadLand().then(() => { if (LAND) { mainMap.queue(); if (state.open) drawDetail(); } });
+  const saved = await restore();
+  if (saved && saved.flights && saved.flights.length) {
+    state.flights = saved.flights; state.csvRows = saved.csvRows || []; state.deleted = saved.deleted || []; state.sample = false;
+    state.flights.forEach(enrich);
+    setStatus(`${state.flights.length} flights from your last visit, stored in this browser. Nothing is uploaded.`);
+    lastFitKey = ""; render();
+  }
+  dbxBoot();
+})();
+})();
+</script>
+<script>
+if ("serviceWorker" in navigator && location.protocol === "https:") navigator.serviceWorker.register("sw.js").catch(() => {});
+</script>
+</body>
+</html>
