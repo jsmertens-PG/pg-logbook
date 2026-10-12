@@ -267,6 +267,23 @@ footer.styles { border-top: 1px solid var(--ink); padding-top: 16px; display: gr
 .chips button i { height: 8px; display: block; border: 1px solid var(--line); }
 .chips button[aria-pressed="true"] { border-color: var(--ink); box-shadow: inset 0 0 0 1px var(--ink); }
 @media (prefers-reduced-motion: no-preference) { button { transition: border-color .15s; } }
+.lessons { list-style: none; margin: 0; padding: 0; display: grid; counter-reset: l; }
+.lessons li { display: grid; grid-template-columns: 34px 1fr auto; gap: 12px; align-items: baseline; padding: 12px 0; border-bottom: 1px solid var(--line); counter-increment: l; }
+.lessons li::before { content: counter(l); font-family: var(--font-display); font-size: 1.5rem; line-height: 1; }
+.lessons li p { margin: 0; max-width: 80ch; }
+.lessons li small { display: block; color: var(--muted); font-size: .78rem; margin-top: 4px; }
+@media (max-width: 640px) { .lessons li { grid-template-columns: 26px 1fr; } .lessons li .ev { grid-column: 2; } }
+.scard[aria-pressed="true"] { border-color: var(--ink); box-shadow: inset 0 0 0 1px var(--ink); }
+table.static tbody tr { cursor: default; }
+table.static tbody tr:hover td { background: transparent; }
+tbody tr.sel td { background: var(--sunk); }
+.endkey { font-size: .78rem; gap: 4px 14px; }
+.endkey dd, .debfacts dd { white-space: normal; text-align: left; }
+.endkey dd { font-family: var(--font-body); color: var(--muted); }
+.debfacts { font-size: .86rem; gap: 6px 16px; align-content: start; }
+.verdict { display: grid; gap: 8px; align-content: start; }
+.verdict label { display: grid; gap: 4px; font-size: .8rem; color: var(--muted); }
+.verdict select { max-width: 340px; }
 </style>
 
 <div class="wrap" id="app">
@@ -291,6 +308,7 @@ footer.styles { border-top: 1px solid var(--ink); padding-top: 16px; display: gr
     <button type="button" data-page="dash" aria-current="page">Dashboard</button>
     <button type="button" data-page="explore">Explore</button>
     <button type="button" data-page="where">Where &amp; when</button>
+    <button type="button" data-page="debrief">Debrief</button>
   </nav>
 
   <div id="status" class="status" role="status">Everything is read in your browser. Nothing is uploaded.</div>
@@ -421,6 +439,31 @@ footer.styles { border-top: 1px solid var(--ink); padding-top: 16px; display: gr
     <div class="panel full"><header><h2>Trips away <span class="q">Do trips pay off compared with flying at home?</span></h2></header><span class="note">Your home area each year is where you flew most that year. A trip is a run of flying days elsewhere, with no more than 4 days between them.</span><div class="statrow" id="tripStats"></div><div class="tablewrap"><table id="tTrips"></table></div></div>
   </div>
 
+
+  <div id="page-debrief" class="page where" hidden>
+    <div class="panel full intro">
+      <header><h2>Debrief</h2></header>
+      <p class="lede">Your XC flights that ended short, and what the tracks say about how they ended. Each track is read for its climbs, glides and the wind drift in your circles. Short flights are then compared with your full ones at the same site. Treat the takeaways as leads to check against what you remember of those days.</p>
+      <div class="defs">
+        <label for="dbSiteN">An XC site has at least <input id="dbSiteN" type="number" min="1" step="1"></label>
+        <label for="dbSiteKm">flights of <input id="dbSiteKm" type="number" min="1" step="1"> km or more</label>
+        <label for="dbCommit">An XC attempt goes more than <input id="dbCommit" type="number" min="0.5" step="0.5"> km from launch</label>
+        <label for="dbShort">Short means under <input id="dbShort" type="number" min="5" max="100" step="5"> % of your median attempt there</label>
+        <label for="dbTandem" class="check"><input id="dbTandem" type="checkbox"> Include tandem flights</label>
+      </div>
+      <div id="debOld" class="banner" hidden></div>
+    </div>
+    <div class="panel full"><header><h2>Your XC sites <span class="q">Where do my XC flights end short?</span></h2></header><div class="cards" id="debCards"></div></div>
+    <div class="panel full" id="debLessonPanel"><header><h2 id="debLessonTitle">Takeaways</h2></header><span class="note" id="debLessonNote"></span><ol class="lessons" id="debLessons"></ol></div>
+    <div class="grid2" id="debGrid">
+      <div class="panel"><header><h2>How short flights ended <span class="q">How do I ground myself?</span></h2><span class="note">click a bar to list those flights</span></header><div class="chart" id="cDebEnd"></div><dl class="kv endkey" id="debEndKey"></dl></div>
+      <div class="panel"><header><h2>Short against full <span class="q">What did I do differently?</span></h2><span class="note">medians</span></header><div class="tablewrap"><table id="tDebCmp" class="static"></table></div></div>
+    </div>
+    <div class="panel full" id="debMapPanel"><header><h2>Where they ended <span class="q">Where do I land out here?</span></h2></header><span class="note">Grey: full flights · coloured: short flights (click one) · ● landing · ○ where you left the last good climb · dashed rings: spots you landed more than once</span><div id="debMap" class="dmap"></div></div>
+    <div class="panel full" id="debListPanel"><header><h2 id="debListTitle">Short flights</h2><span class="note">click a flight to see how it ended</span></header><div class="tablewrap"><table id="tDebShort"></table></div></div>
+    <div class="panel full siteprof" id="debDetail" hidden></div>
+  </div>
+
   <footer class="styles">
     <span class="eyebrow">Light or dark</span>
     <div class="presets" id="themeChips" role="group" aria-label="Light or dark">
@@ -546,7 +589,81 @@ function analyze(fx) {
     tOff: L.t, airtime: last.t - L.t, maxAlt, minAlt, launchAlt: L.alt, landAlt: last.alt, gain, maxClimb, maxSink,
     trackKm, maxDistKm: maxDist, straightKm: dist(L.lat, L.lon, last.lat, last.lon),
     lat: L.lat, lon: L.lon, landLat: last.lat, landLon: last.lon, track, firstT: fx[0].t, lastT: fx[n - 1].t,
+    an: anatomy(seg),
   };
+}
+
+/* ---------- flight anatomy: thermals and glides, read from the full-resolution track (Debrief page) ----------
+   The track is resampled every 4 s in local km. Circling = the heading keeps turning one way (more than ~4.5°/s
+   over 24 s). Circling stretches of 40 s or more with at least one full turn count as thermals. Wind comes from
+   how the circles drift: the centre of the first full circle against the centre of the last. */
+const AN_V = 1;
+function anatomy(seg) {
+  const DT = 4, t0 = seg[0].t, t1 = seg[seg.length - 1].t;
+  if (t1 - t0 < 300 || seg.length < 30) return { v: AN_V, th: [], gl: [], circ: 0 };
+  const lat0 = seg[0].lat, lon0 = seg[0].lon, kx = 111.32 * Math.cos(lat0 * Math.PI / 180), ky = 110.574;
+  const N = Math.floor((t1 - t0) / DT) + 1, X = new Float64Array(N), Y = new Float64Array(N), A = new Float64Array(N);
+  let j = 0;
+  for (let i = 0; i < N; i++) {
+    const t = t0 + i * DT;
+    while (j < seg.length - 2 && seg[j + 1].t < t) j++;
+    const a = seg[j], b = seg[j + 1] || a, u = b.t > a.t ? Math.max(0, Math.min(1, (t - a.t) / (b.t - a.t))) : 0;
+    X[i] = (a.lon + (b.lon - a.lon) * u - lon0) * kx; Y[i] = (a.lat + (b.lat - a.lat) * u - lat0) * ky; A[i] = a.alt + (b.alt - a.alt) * u;
+  }
+  const H = new Float64Array(N), T = new Float64Array(N);
+  for (let i = 0; i < N - 1; i++) { const dx = X[i + 1] - X[i], dy = Y[i + 1] - Y[i]; H[i] = Math.hypot(dx, dy) < 0.001 && i ? H[i - 1] : Math.atan2(dx, dy); }
+  H[N - 1] = H[N - 2];
+  for (let i = 1; i < N; i++) { let d = H[i] - H[i - 1]; while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI; T[i] = d; }
+  const P = new Float64Array(N + 1); for (let i = 0; i < N; i++) P[i + 1] = P[i] + T[i];
+  const circ = new Uint8Array(N);
+  for (let i = 0; i < N; i++) { const a = Math.max(0, i - 3), b = Math.min(N, i + 3); circ[i] = Math.abs(P[b] - P[a]) > 1.9 * (b - a) / 6 ? 1 : 0; }
+  // runs of circling, joining gaps of up to 16 s
+  const runs = [];
+  for (let i = 0; i < N; i++) {
+    if (!circ[i]) continue;
+    let e = i; while (e + 1 < N && circ[e + 1]) e++;
+    const last = runs[runs.length - 1];
+    if (last && i - last[1] <= 4) last[1] = e; else runs.push([i, e]);
+    i = e;
+  }
+  const r1 = (v) => Math.round(v * 10) / 10, r5 = (v) => Math.round(v * 1e5) / 1e5, ll = (x, y) => [r5(lat0 + y / ky), r5(lon0 + x / kx)];
+  const brg = (x0, y0, x1, y1) => Math.round(((Math.atan2(x1 - x0, y1 - y0) * 180 / Math.PI) + 360) % 360);
+  const th = [];
+  let circT = 0;
+  for (const [s, e] of runs) {
+    if ((e - s) * DT < 40) continue;
+    let turn = 0; for (let k = s + 1; k <= e; k++) turn += Math.abs(T[k]);
+    if (turn < 2 * Math.PI) continue;
+    circT += (e - s) * DT;
+    let top = -1e9, cx = 0, cy = 0; for (let k = s; k <= e; k++) { if (A[k] > top) top = A[k]; cx += X[k]; cy += Y[k]; }
+    cx /= e - s + 1; cy /= e - s + 1;
+    const dur = (e - s) * DT, k60 = Math.max(s, e - 15);
+    // circles: close one every full turn, keep its centre and mean time
+    const circles = []; let acc = 0, sx = 0, sy = 0, st = 0, sn = 0;
+    for (let k = s + 1; k <= e; k++) {
+      acc += Math.abs(T[k]); sx += X[k]; sy += Y[k]; st += k; sn++;
+      if (acc >= 2 * Math.PI * (circles.length + 1)) { circles.push([sx / sn, sy / sn, st / sn]); sx = sy = st = sn = 0; }
+    }
+    let wSpd = null, wFrom = null;
+    if (circles.length >= 3) {
+      const c0 = circles[0], c1 = circles[circles.length - 1], dt = (c1[2] - c0[2]) * DT;
+      if (dt > 0) {
+        const vx = (c1[0] - c0[0]) / dt * 3600, vy = (c1[1] - c0[1]) / dt * 3600, sp = Math.hypot(vx, vy);
+        if (sp < 70) { wSpd = r1(sp); wFrom = Math.round((Math.atan2(-vx, -vy) * 180 / Math.PI + 360) % 360); }
+      }
+    }
+    th.push([s * DT, dur, Math.round(A[s]), Math.round(A[e]), Math.round(top), Math.round((A[e] - A[s]) / dur * 100) / 100,
+      Math.round((A[e] - A[k60]) / Math.max(DT, (e - k60) * DT) * 100) / 100, ...ll(cx, cy), ...ll(X[e], Y[e]), wSpd, wFrom, circles.length]);
+  }
+  // glides: the straight stretches between thermals (including launch → first and last → landing)
+  const gl = [], cuts = [[0, 0]];
+  for (const t of th) cuts.push([t[0] / DT, (t[0] + t[1]) / DT]);
+  cuts.push([N - 1, N - 1]);
+  for (let k = 1; k < cuts.length; k++) {
+    const a = cuts[k - 1][1], b = cuts[k][0]; if ((b - a) * DT < 30) continue;
+    gl.push([a * DT, (b - a) * DT, Math.round(Math.hypot(X[b] - X[a], Y[b] - Y[a]) * 100) / 100, Math.round(A[a] - A[b]), brg(X[a], Y[a], X[b], Y[b])]);
+  }
+  return { v: AN_V, th, gl, circ: Math.round(circT / (t1 - t0) * 100) / 100 };
 }
 
 /* ---------- CSV (XContest export) ---------- */
@@ -645,7 +762,11 @@ function siteLabel(f) {
 /* ---------- loading files ---------- */
 const sameFlight = (a, b) => Math.abs(a.epoch - b.epoch) < 5 * 60000 && dist(a.lat, a.lon, b.lat, b.lon) < 0.5;
 /* when two files hold the same flight, keep the richer recording: more track points, then longer airtime */
-const richer = (a, b) => ((b.nFix || 0) > (a.nFix || 0) || ((b.nFix || 0) === (a.nFix || 0) && b.airtime > a.airtime) ? b : a);
+const richer = (a, b) => {
+  const ra = !!(a.an && a.an.v === AN_V), rb = !!(b.an && b.an.v === AN_V);
+  if (ra !== rb) return rb ? b : a; // a copy read with the current analysis beats one stored before it existed
+  return (b.nFix || 0) > (a.nFix || 0) || ((b.nFix || 0) === (a.nFix || 0) && b.airtime > a.airtime) ? b : a;
+};
 const isDeleted = (f) => state.deleted.some((d) => (typeof d === "string" ? d === f.id : d.id === f.id || sameFlight({ epoch: d.e, lat: d.lat, lon: d.lon }, f)));
 async function loadFiles(files) {
   files = [...files].filter((f) => /\.(igc|csv)$/i.test(f.name));
@@ -726,18 +847,22 @@ function makeSample() {
     const dur = s.soar ? 900 + rnd() * 2400 : 600 + rnd() * rnd() * 15000;
     const startLocal = (s.off > 0 ? 9.5 : 11) + rnd() * 5;
     const t0 = Math.round((startLocal - s.off) * 3600 + 86400) % 86400;
-    let lat = s.lat, lon = s.lon, alt = s.alt + (s.soar ? 0 : 0), hd = rnd() * 6.28, fixes = [];
+    let lat = s.lat, lon = s.lon, alt = s.alt, hd = rnd() * 6.28, fixes = [];
     const xc = !s.soar && dur > 4000 ? 0.6 + rnd() * 0.4 : 0;
+    const onCourse = !s.soar && rnd() < 0.75, course = rnd() * 6.28;
+    // a day of its own: cloudbase, climb strength, wind (blowing towards wDir), where the landing field is
+    const ceil = s.alt + 700 + rnd() * 1600, strength = 0.8 + rnd() * 2.2, wSpd = rnd() * 6, wDir = rnd() * 6.28, ground = Math.max(20, s.alt - (s.alt > 500 ? 600 : 150));
     for (let t = 0; t <= dur; t += 10) {
-      const climbing = !s.soar && Math.sin(t / 420 + k) > 0.2;
-      hd += climbing ? 0.35 : (rnd() - 0.5) * 0.3;
+      const ending = !s.soar && t > dur - 600;
+      const climbing = !s.soar && !ending && Math.sin(t / 420 + k) > 0.2 && alt < ceil;
+      hd = climbing ? hd + 1.3 : onCourse ? course + (rnd() - 0.5) * 0.5 : hd + (rnd() - 0.5) * 0.3;
       const v = climbing ? 9 : 10 + rnd() * 3;
-      lat += (Math.cos(hd) * v * 10 + (xc ? 6 * xc : 0)) / 111000;
-      lon += (Math.sin(hd) * v * 10 + (xc ? 4 * xc : 0)) / (111000 * Math.cos(lat * Math.PI / 180));
+      lat += (Math.cos(hd) * v * 10 + Math.cos(wDir) * wSpd * 10) / 111000;
+      lon += (Math.sin(hd) * v * 10 + Math.sin(wDir) * wSpd * 10) / (111000 * Math.cos(lat * Math.PI / 180));
       if (s.soar) { alt = s.alt + 60 + Math.sin(t / 200) * 30 + rnd() * 8; lat = s.lat + Math.sin(t / 300) * 0.012; lon = s.lon + Math.cos(t / 900) * 0.002; }
-      else alt += climbing ? 1.2 + rnd() * 2 : -(0.9 + rnd() * 0.6);
-      if (!s.soar && t > dur - 300) alt -= 6;
-      alt = Math.max(s.soar ? 20 : 200, alt);
+      else if (ending) alt += (ground - alt) / Math.max(1, (dur - t) / 10);
+      else alt += climbing ? (strength + (rnd() - 0.5)) * 10 : -(11 + rnd() * 5);
+      alt = Math.max(s.soar ? 20 : ground, alt);
       fixes.push({ t: t0 + t, lat, lon, alt });
     }
     const a = analyze(fixes);
@@ -1240,8 +1365,8 @@ function barChart(el, data, { yFmt = (v) => v, onClick, height = 220, labelEvery
   bindTips(el);
   if (onClick) el.querySelectorAll(".hit").forEach((r) => r.addEventListener("click", () => onClick(data[+r.dataset.i])));
 }
-function hbarChart(el, data, { onClick } = {}) {
-  const W = 760, rowH = 26, ml = 230, mr = 70, H = data.length * rowH + 8;
+function hbarChart(el, data, { onClick, W = 760, ml = 230 } = {}) {
+  const rowH = 26, mr = 70, H = data.length * rowH + 8;
   const max = Math.max(1, ...data.map((d) => d.value));
   let s = `<svg viewBox="0 0 ${W} ${H}" role="img">`;
   data.forEach((d, i) => {
@@ -1870,6 +1995,441 @@ function renderWhere(list) {
   renderSiteProfile(wl, reg); renderRhythm(wl); renderTrips(wl, reg);
 }
 
+/* ---------- Debrief: XC flights that ended short, and how they ended ----------
+   An XC site: at least N flights of K km or more. An XC attempt: went more than C km from launch.
+   Short: XC distance under P % of the median attempt at that site. Everything else here is read from
+   the thermals and glides that anatomy() found in each track. */
+const DEB_DEF = { siteN: 3, siteKm: 20, commitKm: 4, shortPct: 50, tandem: false, site: "all", end: null, sel: null };
+const hasAn = (f) => !!(f.an && f.an.v === AN_V);
+const avg = (a) => a.reduce((x, y) => x + y, 0) / a.length;
+const COMPASS = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
+const compass = (b) => COMPASS[Math.round((((b % 360) + 360) % 360) / 45) % 8];
+const SECT4 = ["north", "east", "south", "west"];
+const bearingLL = (a1, o1, a2, o2) => {
+  const r = Math.PI / 180, y = Math.sin((o2 - o1) * r) * Math.cos(a2 * r), x = Math.cos(a1 * r) * Math.sin(a2 * r) - Math.sin(a1 * r) * Math.cos(a2 * r) * Math.cos((o2 - o1) * r);
+  return (Math.atan2(y, x) / r + 360) % 360;
+};
+const landHour = (f) => f.hour + f.airtime / 3600;
+const fmtRel = (v) => (v >= 0 ? `${fmtM(v)} m above launch` : `${fmtM(-v)} m below launch`);
+const shortCol = () => (state.style === "mono" ? css("--ink") : cm(0.85));
+let verdicts = {};
+try { verdicts = JSON.parse(localStorage.getItem("pg-verdicts") || "{}"); } catch (e) { verdicts = {}; }
+const saveVerdicts = () => { try { localStorage.setItem("pg-verdicts", JSON.stringify(verdicts)); } catch (e) { /* ignore */ } };
+const saveDeb = () => { try { const { sel: _s, end: _e, ...keep } = state.deb; localStorage.setItem("pg-deb1", JSON.stringify(keep)); } catch (e) { /* ignore */ } };
+
+/* first point more than C km from launch: when, how high, which way */
+const commitMemo = new WeakMap();
+function commitOf(f) {
+  const km = state.deb.commitKm, c = commitMemo.get(f);
+  if (c && c.km === km) return c.v;
+  const tr = f.track; let v = null;
+  for (const p of tr) {
+    if (dist(tr[0][0], tr[0][1], p[0], p[1]) > km) { v = { t: p[3], alt: p[2], above: p[2] - f.launchAlt, bearing: bearingLL(tr[0][0], tr[0][1], p[0], p[1]) }; break; }
+  }
+  commitMemo.set(f, { km, v });
+  return v;
+}
+/* thermal row: [t0, dur, altIn, altOut, top, climb, exitClimb, cLat, cLon, xLat, xLon, windKmh, windFrom, circles] */
+const usefulTh = (f) => (hasAn(f) ? f.an.th.filter((t) => t[3] - t[2] >= 80) : []);
+function windOf(ths) {
+  let vx = 0, vy = 0, w = 0;
+  for (const t of ths) { if (t[11] == null) continue; const n = t[13], r = (t[12] * Math.PI) / 180; vx -= Math.sin(r) * t[11] * n; vy -= Math.cos(r) * t[11] * n; w += n; }
+  if (!w) return null;
+  vx /= w; vy /= w;
+  return { spd: Math.hypot(vx, vy), from: ((Math.atan2(-vx, -vy) * 180) / Math.PI + 360) % 360 };
+}
+/* the end of the flight: last climb worth 80 m or more, the glide from there to the landing, weak tries after it */
+const finMemo = new WeakMap();
+function finalOf(f) {
+  if (!hasAn(f)) return null;
+  if (finMemo.has(f)) return finMemo.get(f);
+  const th = f.an.th, us = usefulTh(f), last = us[us.length - 1];
+  let out;
+  if (!last) out = { none: true, after: th, wind: windOf(th) };
+  else {
+    const exitT = last[0] + last[1], after = th.filter((t) => t[0] > last[0]);
+    const km = dist(last[9], last[10], f.landLat, f.landLon), loss = last[3] - f.landAlt, bearing = bearingLL(last[9], last[10], f.landLat, f.landLon);
+    const wind = windOf(th.filter((t) => t[11] != null).slice(-3)) || windOf(th);
+    out = {
+      last, exitT, after, km, loss, ld: loss > 30 && km > 0.3 ? (km * 1000) / loss : null, bearing, wind,
+      hw: wind && km > 0.5 ? wind.spd * Math.cos(((wind.from - bearing) * Math.PI) / 180) : null,
+      belowTop: f.maxAlt - last[3], toLand: f.airtime - exitT,
+    };
+  }
+  finMemo.set(f, out);
+  return out;
+}
+
+const ENDINGS = {
+  day: ["Ran out of day", "Flew at least half as long as your full flights there, and landed within half an hour of when they usually land.", "These flights were cut short by the clock, not by a mistake in the air. Launching earlier, or flying faster on the good part of the day, is what would have helped."],
+  low: ["Never got established", "Never climbed 300 m above launch, or never found a climb worth 80 m.", "Stay with the house thermal until you're well above launch before setting off. Leaving low has been costly."],
+  wind: ["Glided into the wind", "The final glide went into a headwind of 12 km/h or more, at a glide of 1:6 or worse.", "Watch the drift of your circles. On windy days, plan crosswind or downwind legs and take every climb to the top before pushing upwind."],
+  early: ["Left a working climb", "Left the last good climb while it still went up 0.8 m/s or more, over 250 m below the day's top.", "Take working climbs to the top before going on glide. These flights left lift that was still working and never found the next one."],
+  glide: ["Long glide, found nothing", "Glided 4 km or more from the last good climb, with at most one weak try on the way.", "Before long glides, leave higher, aim at reliable triggers, and keep a landable fallback in reach."],
+  scratch: ["Scratched low and lost it", "Tried two or more weak climbs after the last good one.", "When low, commit to one climb and drift with it rather than trying several weak ones."],
+  sink: ["Sank out", "None of the other patterns fits.", ""],
+  weather: ["Weak or overdeveloped day", "Your verdict.", "Check the forecast for overdevelopment, inversions and wind before committing to XC."],
+  purpose: ["Landed on purpose", "Your verdict. Left out of all the numbers here.", ""],
+  na: ["Not analysed yet", "Loaded before this page existed. Re-read the file to analyse it.", ""],
+};
+const VERDICTS = ["day", "low", "wind", "early", "glide", "scratch", "weather", "sink", "purpose"];
+/* ref: { land: usual landing hour of full flights there, air: their median airtime } */
+function endingOf(f, ref) {
+  if (!hasAn(f)) return "na";
+  const fin = finalOf(f);
+  if (ref && ref.land != null && landHour(f) >= ref.land - 0.5 && f.airtime >= 0.5 * ref.air) return "day";
+  if (fin.none || f.maxAlt - f.launchAlt < 300) return "low";
+  if (fin.hw != null && fin.hw >= 12 && fin.ld != null && fin.ld <= 6) return "wind";
+  if (fin.last[6] >= 0.8 && fin.belowTop > 250) return "early";
+  if (fin.km >= 4 && fin.after.length <= 1) return "glide";
+  if (fin.after.length >= 2) return "scratch";
+  return "sink";
+}
+const endKey = (f, ref) => verdicts[f.id] || endingOf(f, ref);
+
+const DEB_METRICS = [
+  { k: "launch", name: "Launch time", get: (f) => f.hour, fmt: hhmm },
+  { k: "commitT", name: "Set off on course after", get: (f) => { const c = commitOf(f); return c ? c.t / 60 : null; }, fmt: (v) => `${Math.round(v)} min` },
+  { k: "commitH", name: "Height when you set off", get: (f) => { const c = commitOf(f); return c ? c.above : null; }, fmt: fmtRel },
+  { k: "climb1", name: "Average climb, first hour", get: (f) => { const u = usefulTh(f).filter((t) => t[0] < 3600); return u.length ? avg(u.map((t) => t[5])) : null; }, fmt: (v) => `${v.toFixed(1)} m/s` },
+  { k: "climb", name: "Average climb, whole flight", get: (f) => { const u = usefulTh(f); return u.length ? avg(u.map((t) => t[5])) : null; }, fmt: (v) => `${v.toFixed(1)} m/s` },
+  { k: "leaveH", name: "Height when leaving climbs", get: (f) => { const u = usefulTh(f); return u.length ? median(u.map((t) => t[3] - f.launchAlt)) : null; }, fmt: fmtRel },
+  { k: "leaveUp", name: "Climbs left while still working", get: (f) => { const u = usefulTh(f); return u.length ? (100 * u.filter((t) => t[6] >= 0.8).length) / u.length : null; }, fmt: (v) => `${Math.round(v)}%` },
+  { k: "wind", name: "Wind at your height", get: (f) => { const w = hasAn(f) && windOf(f.an.th); return w ? w.spd : null; }, fmt: (v) => `${Math.round(v)} km/h` },
+  { k: "circ", name: "Time spent circling", get: (f) => (hasAn(f) && f.an.th.length ? f.an.circ * 100 : null), fmt: (v) => `${Math.round(v)}%` },
+  { k: "landT", name: "Landing time", get: landHour, fmt: hhmm },
+];
+const metric = (k) => DEB_METRICS.find((m) => m.k === k);
+function compare(k, S, F) {
+  const m = metric(k), vals = (fl) => fl.map(m.get).filter((v) => v != null && isFinite(v));
+  const a = vals(S), b = vals(F);
+  return { m, s: a.length ? median(a) : null, f: b.length ? median(b) : null, ns: a.length, nf: b.length, ok: a.length >= 2 && b.length >= 2 };
+}
+
+/* landing spots used more than once: greedy 2 km clusters */
+function clustersOf(fl) {
+  let pts = fl.map((f) => ({ f, lat: f.landLat, lon: f.landLon }));
+  const out = [];
+  while (pts.length) {
+    let best = null, bn = 0;
+    for (const p of pts) { const n = pts.filter((q) => dist(p.lat, p.lon, q.lat, q.lon) < 2).length; if (n > bn) { bn = n; best = p; } }
+    if (bn < 2) break;
+    const mem = pts.filter((q) => dist(best.lat, best.lon, q.lat, q.lon) < 2);
+    out.push({ lat: avg(mem.map((m) => m.lat)), lon: avg(mem.map((m) => m.lon)), fl: mem.map((m) => m.f) });
+    pts = pts.filter((q) => !mem.includes(q));
+  }
+  return out;
+}
+
+function debData(list) {
+  const D = state.deb, fl = list.filter((f) => D.tandem || !f.tandem);
+  const sites = groupSites(fl).map((s) => ({
+    ...s,
+    longOnes: s.flights.filter((f) => f.xcKm >= D.siteKm).length,
+    attempts: s.flights.filter((f) => commitOf(f) && verdicts[f.id] !== "purpose"),
+  })).filter((s) => s.longOnes >= D.siteN && s.attempts.length >= 3);
+  for (const s of sites) {
+    s.medKm = median(s.attempts.map((f) => f.xcKm));
+    s.cut = (s.medKm * D.shortPct) / 100;
+    s.short = s.attempts.filter((f) => f.xcKm < s.cut);
+    s.full = s.attempts.filter((f) => f.xcKm >= s.cut);
+    s.refLand = s.full.length >= 2 ? median(s.full.map(landHour)) : null;
+    s.ref = { land: s.refLand, air: s.full.length ? median(s.full.map((f) => f.airtime)) : 0 };
+    s.ends = new Map(s.short.map((f) => [f, endKey(f, s.ref)]));
+    s.clusters = clustersOf(s.short);
+    s.launch = s.attempts[0];
+    s.country = s.flights.map((f) => f.country).find(Boolean) || "";
+  }
+  return sites.sort((a, b) => b.attempts.length - a.attempts.length);
+}
+function combineSites(sites) {
+  const ends = new Map();
+  sites.forEach((s) => s.ends.forEach((v, k) => ends.set(k, v)));
+  return { key: "all", label: "All XC sites", attempts: sites.flatMap((s) => s.attempts), short: sites.flatMap((s) => s.short), full: sites.flatMap((s) => s.full), ends, clusters: [], sites };
+}
+function endCounts(g) {
+  const c = new Map();
+  for (const k of g.ends.values()) c.set(k, (c.get(k) || 0) + 1);
+  return [...c.entries()].sort((a, b) => b[1] - a[1]);
+}
+
+/* ---------- takeaways ---------- */
+const evTag = (n) => (n >= 5 ? ["strong", "Solid evidence"] : n >= 3 ? ["", "Some evidence"] : ["", "Thin evidence"]);
+function lessons(g, isSite) {
+  const S = g.short, F = g.full, out = [], here = isSite ? " here" : "";
+  const add = (text, effect, n, why) => out.push({ text, score: Math.min(effect, 3) * Math.sqrt(n), n, why });
+  const why = (c) => `Medians of ${c.ns} short and ${c.nf} full flight${c.nf === 1 ? "" : "s"}.`;
+  let c;
+  const ec = endCounts(g).filter(([k]) => k !== "na"), nS = ec.reduce((a, [, n]) => a + n, 0);
+  if (ec.length && ec[0][1] >= 2 && ec[0][1] / nS >= 0.3) {
+    const [k, n] = ec[0], E = ENDINGS[k];
+    add(`Most short flights${here} ended the same way: <b>${E[0].toLowerCase()}</b> (${n} of ${nS}). ${E[2]}`, 1 + (2 * n) / nS, n, E[1]);
+  }
+  if ((c = compare("climb1", S, F)).ok && c.f - c.s >= 0.3)
+    add(`First-hour climbs averaged <b>${c.s.toFixed(1)} m/s</b> on short flights against <b>${c.f.toFixed(1)} m/s</b> on full ones. A weak first hour has been an early warning${here}: stay high and fly conservatively on those days.`, (c.f - c.s) / 0.3, Math.min(c.ns, c.nf), why(c));
+  if ((c = compare("leaveH", S, F)).ok && c.f - c.s >= 150)
+    add(`You left climbs lower on short flights: <b>${fmtRel(c.s)}</b> against <b>${fmtRel(c.f)}</b> on full ones. Taking climbs higher has paid off${here}.`, (c.f - c.s) / 200, Math.min(c.ns, c.nf), why(c));
+  if ((c = compare("leaveUp", S, F)).ok && c.s - c.f >= 15)
+    add(`On short flights you left <b>${Math.round(c.s)}%</b> of climbs while they were still working (full flights: <b>${Math.round(c.f)}%</b>). Ride working climbs to the top before going on glide.`, (c.s - c.f) / 15, Math.min(c.ns, c.nf), why(c));
+  if ((c = compare("commitH", S, F)).ok && c.f - c.s >= 150)
+    add(`You set off on course lower on short flights: <b>${fmtRel(c.s)}</b> against <b>${fmtRel(c.f)}</b>. Top up before leaving the launch area.`, (c.f - c.s) / 200, Math.min(c.ns, c.nf), why(c));
+  if ((c = compare("commitT", S, F)).ok && c.f - c.s >= 10 && c.s < c.f * 0.75)
+    add(`You set off sooner on short flights, after <b>${Math.round(c.s)} min</b> in the air against <b>${Math.round(c.f)} min</b> on full ones. Patience at the start has paid off${here}.`, (c.f - c.s) / 15, Math.min(c.ns, c.nf), why(c));
+  if ((c = compare("launch", S, F)).ok && Math.abs(c.s - c.f) >= 0.4)
+    add(c.s < c.f
+      ? `Short flights launched earlier, around <b>${hhmm(c.s)}</b>, than full ones (<b>${hhmm(c.f)}</b>). Waiting for the day to switch on has paid off${here}.`
+      : `Short flights launched later, around <b>${hhmm(c.s)}</b>, than full ones (<b>${hhmm(c.f)}</b>). Being in the air earlier leaves more day to work with${here}.`, Math.abs(c.s - c.f) / 0.5, Math.min(c.ns, c.nf), why(c));
+  if ((c = compare("wind", S, F)).ok && c.s - c.f >= 5)
+    add(`Short days were windier at your height: <b>${Math.round(c.s)} km/h</b> against <b>${Math.round(c.f)} km/h</b>, estimated from the drift of your circles. On windy days${here}, expect less.`, (c.s - c.f) / 6, Math.min(c.ns, c.nf), why(c));
+  if (isSite) {
+    // which way you set off
+    const bySec = new Map();
+    for (const f of g.attempts) { const s = SECT4[Math.round(commitOf(f).bearing / 90) % 4], o = bySec.get(s) || { n: 0, sh: 0 }; o.n++; if (S.includes(f)) o.sh++; bySec.set(s, o); }
+    const rate = S.length / g.attempts.length;
+    for (const [sec, o] of bySec) {
+      if (o.n >= 3 && o.sh >= 2 && o.sh / o.n >= Math.max(0.6, rate * 1.5))
+        add(`When you set off to the <b>${sec}</b>, ${o.sh} of ${o.n} flights ended short (${pct(S.length, g.attempts.length)}% overall here).`, (o.sh / o.n - rate) * 4, o.n, `Direction from launch to the point ${state.deb.commitKm} km out.`);
+      if (o.n >= 3 && o.sh / o.n <= rate * 0.5 && o.n - o.sh >= 3)
+        add(`Setting off to the <b>${sec}</b> has worked: ${o.n - o.sh} of ${o.n} of those flights went the full distance.`, (rate - o.sh / o.n) * 4, o.n, `Direction from launch to the point ${state.deb.commitKm} km out.`);
+    }
+    for (const cl of g.clusters.slice(0, 2)) {
+      const L0 = g.launch, d = dist(L0.lat, L0.lon, cl.lat, cl.lon), b = bearingLL(L0.lat, L0.lon, cl.lat, cl.lon);
+      const ce = endCounts({ ends: new Map(cl.fl.map((f) => [f, g.ends.get(f)])) })[0];
+      add(`You landed <b>${cl.fl.length} times</b> around ${fmtKm(d)} km ${compass(b)} of launch (the dashed ring on the map)${ce && ce[1] >= 2 && ce[0] !== "na" ? `, mostly after: ${ENDINGS[ce[0]][0].toLowerCase()}` : ""}. Know where the climbs are before that point, or route around it.`, 0.8 + cl.fl.length / 3, cl.fl.length, cl.fl.map((f) => prettyDate(f.date)).join(" · "));
+    }
+  } else if (g.sites.length > 1) {
+    const worst = [...g.sites].filter((s) => s.attempts.length >= 4).sort((a, b) => b.short.length / b.attempts.length - a.short.length / a.attempts.length)[0];
+    if (worst && worst.short.length >= 2) add(`Your highest share of short flights is at <b>${esc(worst.label)}</b>: ${worst.short.length} of ${worst.attempts.length} attempts. Pick it above for its own takeaways and a map.`, 0.6, worst.attempts.length, `Short there means under ${fmtKm(worst.cut)} km.`);
+  }
+  return out.sort((a, b) => b.score - a.score).slice(0, 7);
+}
+
+/* ---------- rendering ---------- */
+function syncDebControls() {
+  const D = state.deb;
+  $("#dbSiteN").value = D.siteN; $("#dbSiteKm").value = D.siteKm; $("#dbCommit").value = D.commitKm; $("#dbShort").value = D.shortPct; $("#dbTandem").checked = D.tandem;
+}
+function renderDebrief(list) {
+  const D = state.deb;
+  syncDebControls();
+  const old = state.sample ? 0 : list.filter((f) => !hasAn(f)).length, ob = $("#debOld");
+  ob.hidden = !old;
+  if (old) {
+    const canDbx = dbxAvailable() && dbxConnected();
+    ob.innerHTML = `<b>${old} flight${old === 1 ? " was" : "s were"} loaded before this page existed</b>, so ${old === 1 ? "its" : "their"} thermals and glides haven't been read yet. ${canDbx ? `<button type="button" id="debReread">Re-read them from Dropbox</button>` : "Load your IGC folder again to read them. Nothing gets doubled."}`;
+    if ($("#debReread")) $("#debReread").addEventListener("click", () => { lsSet("pg-dbx-seen", null); dbxSync(false); });
+  }
+  const sites = debData(list), show = (on) => ["#debLessonPanel", "#debGrid", "#debMapPanel", "#debListPanel"].forEach((s) => { $(s).hidden = !on; });
+  if (!sites.length) {
+    $("#debCards").innerHTML = `<p class="muted">No XC sites with these settings yet. A site needs at least ${D.siteN} flights of ${D.siteKm} km or more, and 3 flights that went more than ${D.commitKm} km from launch.</p>`;
+    show(false); $("#debDetail").hidden = true;
+    return;
+  }
+  show(true);
+  if (D.site !== "all" && !sites.find((s) => s.key === D.site)) D.site = "all";
+  const all = combineSites(sites), isSite = D.site !== "all", g = isSite ? sites.find((s) => s.key === D.site) : all;
+  renderDebCards(sites, all);
+  renderLessons(g, isSite);
+  renderEndings(g);
+  renderCompare(g);
+  renderDebMap(g, isSite);
+  renderShortTable(g, isSite);
+  renderDebDetail(g);
+}
+function renderDebCards(sites, all) {
+  const D = state.deb, col = shortCol();
+  const card = (s, isAll) => {
+    const ec = endCounts(s).filter(([k]) => k !== "na")[0];
+    return `<button type="button" class="scard" data-key="${esc(s.key)}" aria-pressed="${D.site === s.key}">
+      <span class="eyebrow">${isAll ? `${sites.length} site${sites.length === 1 ? "" : "s"}` : esc(s.country) || "&nbsp;"}</span>
+      <span class="sname">${esc(s.label)}</span>
+      <span class="meter"><i style="width:${pct(s.short.length, s.attempts.length)}%;background:${col}"></i></span>
+      <span class="big">${s.short.length} of ${s.attempts.length} attempts short</span>
+      <dl>${isAll ? "" : `<dt>Median attempt</dt><dd>${fmtKm(s.medKm)} km</dd><dt>Short means under</dt><dd>${fmtKm(s.cut)} km</dd><dt>Best</dt><dd>${fmtKm(Math.max(...s.attempts.map((f) => f.xcKm)))} km</dd>`}<dt>Most common ending</dt><dd>${ec ? esc(ENDINGS[ec[0]][0]) : "–"}</dd></dl>
+    </button>`;
+  };
+  $("#debCards").innerHTML = (sites.length > 1 ? card(all, true) : "") + sites.map((s) => card(s, false)).join("");
+  $("#debCards").querySelectorAll(".scard").forEach((b) => b.addEventListener("click", () => {
+    D.site = b.dataset.key; D.end = null; D.sel = null; saveDeb(); renderDebrief(filtered());
+    $("#debLessonPanel").scrollIntoView({ behavior: "smooth", block: "start" });
+  }));
+}
+function renderLessons(g, isSite) {
+  const L0 = lessons(g, isSite), analysed = g.short.filter((f) => g.ends.get(f) !== "na").length;
+  $("#debLessonTitle").innerHTML = `Takeaways · ${esc(g.label)} <span class="q">What should I keep in mind${isSite ? " here" : ""}?</span>`;
+  $("#debLessonNote").textContent = `From ${g.short.length} short and ${g.full.length} full XC attempt${g.full.length === 1 ? "" : "s"}${analysed < g.short.length ? ` (${g.short.length - analysed} not analysed yet)` : ""}. Patterns in your own flights, not proof of cause: check them against what you remember of those days.`;
+  $("#debLessons").innerHTML = L0.length
+    ? L0.map((l) => { const ev = evTag(l.n); return `<li><p>${l.text}<small>${esc(l.why)}</small></p><span class="ev ${ev[0]}">${ev[1]}</span></li>`; }).join("")
+    : `<li><p>No clear difference between your short and full flights${isSite ? " here" : ""} yet. With ${g.short.length} short flight${g.short.length === 1 ? "" : "s"}, chance plays a big part. Set your own verdict on each one below; they count towards these takeaways.</p><span></span></li>`;
+}
+function renderEndings(g) {
+  const D = state.deb, ec = endCounts(g);
+  if (!ec.length) { $("#cDebEnd").innerHTML = `<p class="muted">No short flights here with these settings.</p>`; $("#debEndKey").innerHTML = ""; return; }
+  hbarChart($("#cDebEnd"), ec.map(([k, n]) => ({ k, label: ENDINGS[k][0], value: n, valueLabel: String(n), on: D.end === k, tip: `${ENDINGS[k][0]}<br>${esc(ENDINGS[k][1])}<br><b>${n}</b> flight${n === 1 ? "" : "s"} · click to list them` })), {
+    W: 520, ml: 190, onClick: (d) => { D.end = D.end === d.k ? null : d.k; renderEndings(g); renderShortTable(g, D.site !== "all"); },
+  });
+  $("#debEndKey").innerHTML = ec.map(([k]) => `<dt>${ENDINGS[k][0]}</dt><dd>${esc(ENDINGS[k][1])}</dd>`).join("");
+}
+function renderCompare(g) {
+  const rows = DEB_METRICS.map((m) => compare(m.k, g.short, g.full));
+  $("#tDebCmp").innerHTML = `<thead><tr><th></th><th class="n">Short</th><th class="n">Full</th></tr></thead><tbody>` +
+    rows.map((c) => `<tr><td style="white-space:normal;min-width:150px">${c.m.name}</td><td class="n">${c.s == null ? "–" : c.m.fmt(c.s)}</td><td class="n">${c.f == null ? "–" : c.m.fmt(c.f)}</td></tr>`).join("") +
+    `</tbody><tfoot><tr><td colspan="3" class="muted" style="white-space:normal;font-size:.78rem">Climbs count when they gained 80 m or more. Wind is estimated from how your circles drifted.</td></tr></tfoot>`;
+}
+
+let debMap = null, debLayer = null;
+function renderDebMap(g, isSite) {
+  $("#debMapPanel").hidden = !isSite;
+  if (!isSite) return;
+  const el = $("#debMap");
+  if (!window.L) { debMapSvg(el, g); return; }
+  if (!debMap) {
+    debMap = L.map(el, { zoomControl: true, attributionControl: true, minZoom: 3, preferCanvas: true });
+    debMap.attributionControl.setPrefix(false);
+    L.control.scale({ imperial: false, position: "bottomleft" }).addTo(debMap);
+    debLayer = L.layerGroup().addTo(debMap);
+  }
+  const bk = state.basemap === "auto" ? "topo" : state.basemap;
+  if (debMap._bk !== bk) {
+    (debMap._base || []).forEach((l) => debMap.removeLayer(l));
+    debMap._base = baseLayers(bk); debMap._base.forEach((l) => l.addTo(debMap)); debMap._bk = bk;
+    debMap._base[0].on("tileerror", () => { tileHealth.err++; checkTiles(); });
+  }
+  debMap.invalidateSize();
+  debLayer.clearLayers();
+  const ink = css("--ink"), bg = css("--bg"), muted = css("--muted"), sc = shortCol(), sel = state.deb.sel;
+  const tipOn = (layer, html) => { layer.on("mouseover", (e) => showTip(html, e.originalEvent.clientX, e.originalEvent.clientY)); layer.on("mouseout", hideTip); };
+  for (const f of g.full) {
+    const line = L.polyline(f.track.map((p) => [p[0], p[1]]), { color: muted, weight: 1.3, opacity: 0.5 }).addTo(debLayer);
+    tipOn(line, `${prettyDate(f.date)} · full flight<br><b>${fmtKm(f.xcKm)}</b> km · <b>${fmtH(f.airtime)}</b> h`);
+    line.on("click", () => { hideTip(); openFlight(f, g.full); });
+  }
+  for (const f of g.short) {
+    const on = f.id === sel, fin = finalOf(f), k = g.ends.get(f);
+    const line = L.polyline(f.track.map((p) => [p[0], p[1]]), { color: sc, weight: on ? 4.5 : 2.2, opacity: on ? 1 : 0.85 }).addTo(debLayer);
+    tipOn(line, `${prettyDate(f.date)} · ${esc(ENDINGS[k][0])}<br><b>${fmtKm(f.xcKm)}</b> km · <b>${fmtH(f.airtime)}</b> h · click for details`);
+    line.on("click", () => { hideTip(); selectShort(f.id); });
+    if (fin && !fin.none) L.circleMarker([fin.last[9], fin.last[10]], { radius: on ? 7 : 5, color: sc, weight: 2, fillColor: bg, fillOpacity: 1, interactive: false }).addTo(debLayer);
+    L.circleMarker([f.landLat, f.landLon], { radius: on ? 6.5 : 4.5, color: bg, weight: 1.5, fillColor: ink, fillOpacity: 1, interactive: false }).addTo(debLayer);
+  }
+  for (const cl of g.clusters) L.circle([cl.lat, cl.lon], { radius: 2000, color: ink, weight: 1.3, dashArray: "5 5", fill: false, interactive: false }).addTo(debLayer);
+  L.circleMarker([g.launch.lat, g.launch.lon], { radius: 8, color: ink, weight: 2.5, fillColor: bg, fillOpacity: 1, interactive: false }).addTo(debLayer);
+  const fitKey = `${g.key}|${g.attempts.length}`;
+  if (debMap._fit !== fitKey) {
+    const b = bounds([...g.short, ...g.full]);
+    if (b) debMap.fitBounds(b, { padding: [24, 24], maxZoom: 13, animate: false });
+    debMap._fit = fitKey;
+  }
+}
+/* plain fallback when the map library isn't there */
+function debMapSvg(el, g) {
+  const fl = [...g.full, ...g.short]; let a0 = 90, a1 = -90, o0 = 180, o1 = -180;
+  for (const f of fl) for (const p of f.track) { a0 = Math.min(a0, p[0]); a1 = Math.max(a1, p[0]); o0 = Math.min(o0, p[1]); o1 = Math.max(o1, p[1]); }
+  const k = Math.cos((((a0 + a1) / 2) * Math.PI) / 180), W = 900, H = 420, pad = 20;
+  const s = Math.min((W - 2 * pad) / Math.max(1e-6, (o1 - o0) * k), (H - 2 * pad) / Math.max(1e-6, a1 - a0));
+  const X = (o) => (W - (o1 - o0) * k * s) / 2 + (o - o0) * k * s, Y = (a) => (H - (a1 - a0) * s) / 2 + (a1 - a) * s;
+  const path = (f) => f.track.map((p, i) => `${i ? "L" : "M"}${X(p[1]).toFixed(1)},${Y(p[0]).toFixed(1)}`).join("");
+  const sc = shortCol(), sel = state.deb.sel;
+  let out = `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" style="width:100%;height:100%;display:block">`;
+  for (const f of g.full) out += `<path d="${path(f)}" fill="none" stroke="var(--muted)" stroke-width="1.2" opacity=".5"/>`;
+  for (const f of g.short) out += `<path class="dpath" data-id="${esc(f.id)}" d="${path(f)}" fill="none" stroke="${sc}" stroke-width="${f.id === sel ? 4 : 2}" style="cursor:pointer"/>`;
+  for (const cl of g.clusters) out += `<circle cx="${X(cl.lon)}" cy="${Y(cl.lat)}" r="${(2 / 111) * s}" fill="none" stroke="var(--ink)" stroke-dasharray="5 5"/>`;
+  for (const f of g.short) { const fin = finalOf(f); if (fin && !fin.none) out += `<circle cx="${X(fin.last[10])}" cy="${Y(fin.last[9])}" r="4.5" fill="var(--bg)" stroke="${sc}" stroke-width="2"/>`; out += `<circle cx="${X(f.landLon)}" cy="${Y(f.landLat)}" r="4" fill="var(--ink)" stroke="var(--bg)"/>`; }
+  out += `<circle cx="${X(g.launch.lon)}" cy="${Y(g.launch.lat)}" r="7" fill="var(--bg)" stroke="var(--ink)" stroke-width="2.5"/></svg>`;
+  el.innerHTML = out;
+  el.querySelectorAll(".dpath").forEach((p) => p.addEventListener("click", () => selectShort(p.dataset.id)));
+}
+
+function selectShort(id) {
+  state.deb.sel = id;
+  renderDebrief(filtered());
+  requestAnimationFrame(() => $("#debDetail").scrollIntoView({ behavior: "smooth", block: "start" }));
+}
+function renderShortTable(g, isSite) {
+  const D = state.deb;
+  let fl = [...g.short].sort((a, b) => b.epoch - a.epoch);
+  if (D.end) fl = fl.filter((f) => g.ends.get(f) === D.end);
+  $("#debListTitle").textContent = D.end ? `Short flights · ${ENDINGS[D.end][0]}` : `Short flights${isSite ? ` at ${g.label}` : ""}`;
+  $("#tDebShort").innerHTML = `<thead><tr><th>Date</th>${isSite ? "" : "<th>Site</th>"}<th class="n">XC km</th><th class="n">Airtime</th><th class="n">Landed</th><th>How it ended</th><th class="n">Left last good climb</th><th class="n">Final glide</th><th class="n">Wind</th></tr></thead><tbody>` +
+    fl.map((f, i) => {
+      const fin = finalOf(f), k = g.ends.get(f), ok = fin && !fin.none;
+      return `<tr data-i="${i}"${f.id === D.sel ? ` class="sel"` : ""}><td><span class="mono">${f.date}</span> <span class="muted mono">${f.time}</span></td>${isSite ? "" : `<td><span class="site">${esc(siteLabel(f))}</span></td>`}
+        <td class="n">${fmtKm(f.xcKm)}</td><td class="n">${fmtH(f.airtime)}</td><td class="n">${hhmm(landHour(f))}</td>
+        <td>${esc(ENDINGS[k][0])}${verdicts[f.id] ? ` <span class="badge">yours</span>` : ""}</td>
+        <td class="n">${ok ? `${fmtM(fin.last[3])} m · ${fin.last[6] >= 0 ? "+" : ""}${fin.last[6].toFixed(1)} m/s` : "–"}</td>
+        <td class="n">${ok ? `${fmtKm(fin.km)} km${fin.ld ? ` · 1:${Math.round(fin.ld)}` : ""}` : "–"}</td>
+        <td class="n">${fin && fin.wind ? `${Math.round(fin.wind.spd)} km/h ${compass(fin.wind.from)}` : "–"}</td></tr>`;
+    }).join("") + `</tbody>` + (D.end ? `<tfoot><tr><td colspan="9"><button type="button" id="debAllShort">Show all short flights</button></td></tr></tfoot>` : "");
+  $("#tDebShort").querySelectorAll("tbody tr").forEach((tr) => tr.addEventListener("click", () => selectShort(fl[+tr.dataset.i].id)));
+  if ($("#debAllShort")) $("#debAllShort").addEventListener("click", () => { D.end = null; renderEndings(g); renderShortTable(g, isSite); });
+}
+
+function debAlt(el, f, fin) {
+  const W = Math.max(340, Math.min(900, el.clientWidth || 900)), H = W < 600 ? 230 : 290, ml = 46, mr = 12, mt = 24, mb = 32, iw = W - ml - mr, ih = H - mt - mb, tr = f.track, T = Math.max(60, f.airtime);
+  const amin = Math.min(f.landAlt, ...tr.map((p) => p[2])), lo = Math.floor(amin / 100) * 100;
+  const { max: span, step } = niceMax(Math.max(200, f.maxAlt - lo), 4), hi = lo + span;
+  const X = (t) => ml + (t / T) * iw, Y = (a) => mt + ih - ((a - lo) / (hi - lo)) * ih, sc = shortCol();
+  let s = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Altitude over the flight with thermals marked">`;
+  for (let v = lo; v <= hi + 1e-6; v += step) s += `<line class="grid" x1="${ml}" x2="${W - mr}" y1="${Y(v)}" y2="${Y(v)}"/><text x="${ml - 6}" y="${Y(v) + 4}" text-anchor="end">${fmtM(v)}</text>`;
+  const tStep = [600, 900, 1800, 3600, 7200].find((x) => T / x <= (W < 600 ? 4 : 8)) || 7200;
+  for (let t = 0; t <= T; t += tStep) s += `<text x="${X(t)}" y="${H - 12}" text-anchor="middle">${hhmm(f.hour + t / 3600)}</text>`;
+  for (const t of f.an.th) {
+    const isLast = fin && !fin.none && t === fin.last, weak = t[3] - t[2] < 80;
+    s += `<rect x="${X(t[0])}" y="${mt}" width="${Math.max(1.5, X(t[0] + t[1]) - X(t[0]))}" height="${ih}" style="fill:${sc};fill-opacity:${isLast ? 0.32 : weak ? 0.06 : 0.14};${weak ? `stroke:${sc};stroke-opacity:.5;stroke-dasharray:3 3` : ""}" data-tip="${esc(`${hhmm(f.hour + t[0] / 3600)} · ${weak ? "weak try" : "climb"}<br><b>${t[3] - t[2] >= 0 ? "+" : ""}${fmtM(t[3] - t[2])}</b> m in ${fmtH(t[1])} · <b>${t[5].toFixed(1)}</b> m/s${t[11] != null ? `<br>wind ${Math.round(t[11])} km/h from ${compass(t[12])}` : ""}`)}"/>`;
+  }
+  s += `<line x1="${ml}" x2="${W - mr}" y1="${Y(f.launchAlt)}" y2="${Y(f.launchAlt)}" style="stroke:var(--muted);stroke-dasharray:2 4"/><text x="${W - mr}" y="${Y(f.launchAlt) - 5}" text-anchor="end">launch</text>`;
+  s += `<path d="${tr.map((p, i) => `${i ? "L" : "M"}${X(p[3]).toFixed(1)},${Y(p[2]).toFixed(1)}`).join("")}" fill="none" style="stroke:var(--ink);stroke-width:1.6"/>`;
+  if (fin && !fin.none) {
+    const x0 = X(fin.exitT), y0 = Y(fin.last[3]), x1 = X(T), y1 = Y(f.landAlt);
+    s += `<line x1="${x0}" y1="${y0}" x2="${x1}" y2="${y1}" style="stroke:${sc};stroke-width:3;stroke-dasharray:7 4"/>`;
+    s += `<circle cx="${x0}" cy="${y0}" r="5.5" style="fill:var(--bg);stroke:${sc};stroke-width:2.5"/>`;
+    const lab = `${W < 600 ? "left" : "left last good climb at"} ${fmtM(fin.last[3])} m`, right = x0 > W - (W < 600 ? 110 : 260);
+    s += `<text x="${x0 + (right ? -9 : 9)}" y="${Math.max(mt + 10, y0 - 9)}" text-anchor="${right ? "end" : "start"}" style="fill:var(--ink);paint-order:stroke;stroke:var(--bg);stroke-width:3px">${lab}</text>`;
+  }
+  el.innerHTML = s + `</svg>`;
+  bindTips(el);
+}
+function renderDebDetail(g) {
+  const D = state.deb, box = $("#debDetail"), f = g.short.find((x) => x.id === D.sel);
+  if (!f) { box.hidden = true; return; }
+  box.hidden = false;
+  const site = g.sites ? g.sites.find((s) => s.short.includes(f)) : g;
+  const k = g.ends.get(f), auto = endingOf(f, site ? site.ref : null), E = ENDINGS[k], fin = finalOf(f);
+  const facts = [];
+  if (hasAn(f)) {
+    const us = usefulTh(f);
+    facts.push(["Launched → landed", `${f.time} → ${hhmm(landHour(f))} · ${fmtH(f.airtime)} h`]);
+    facts.push(["Climbs (80 m or more)", us.length ? `${us.length} · average ${avg(us.map((t) => t[5])).toFixed(1)} m/s` : "none"]);
+    if (fin && !fin.none) {
+      const L = fin.last;
+      facts.push(["Last good climb", `${hhmm(f.hour + L[0] / 3600)} · +${fmtM(L[3] - L[2])} m to ${fmtM(L[3])} m at ${L[5].toFixed(1)} m/s`]);
+      facts.push(["Left it", `still going ${L[6] >= 0 ? "up" : "down"} ${Math.abs(L[6]).toFixed(1)} m/s · ${fmtM(Math.max(0, fin.belowTop))} m below the day's top`]);
+      facts.push(["Final glide", `${fmtKm(fin.km)} km to the ${compass(fin.bearing)} from ${fmtM(fin.loss)} m above the landing${fin.ld ? ` · glide 1:${Math.round(fin.ld)}` : ""}`]);
+      if (fin.hw != null) facts.push(["On that glide", fin.hw >= 2 ? `headwind about ${Math.round(fin.hw)} km/h` : fin.hw <= -2 ? `tailwind about ${Math.round(-fin.hw)} km/h` : "wind mostly across"]);
+      facts.push(["Weak tries after it", fin.after.length ? `${fin.after.length} · ${fmtH(fin.after.reduce((a, t) => a + t[1], 0))} h circling` : "none"]);
+    }
+    if (fin && fin.wind) facts.push(["Wind from your circles", `${Math.round(fin.wind.spd)} km/h from ${compass(fin.wind.from)}`]);
+    if (site && site.full && site.full.length >= 2) {
+      const c = compare("launch", [f], site.full), cc = compare("commitH", [f], site.full);
+      facts.push(["Your full flights here", `launched around ${hhmm(c.f)}${cc.f != null ? `, set off ${fmtRel(cc.f)}` : ""}${site.refLand != null ? `, landed around ${hhmm(site.refLand)}` : ""}`]);
+    }
+  }
+  box.innerHTML = `<header><div class="t"><span class="eyebrow">${DOW[f.dow]} ${prettyDate(f.date)} · ${esc(siteLabel(f))} · ${fmtKm(f.xcKm)} km</span><h2>${esc(E[0])}</h2><span class="muted">${esc(E[1])}</span></div><span class="actions"><button type="button" id="debOpen">Open flight</button><button type="button" id="debClose">Close</button></span></header>
+    ${hasAn(f) ? `<div class="chart" id="cDebAlt"></div><span class="note">Shaded: climbs · dashed boxes: weak tries · ○ and dashed line: from the last good climb to the landing</span>` : ""}
+    <div class="grid2"><dl class="kv debfacts">${facts.map(([a, b]) => `<dt>${a}</dt><dd>${esc(b)}</dd>`).join("") || `<dt>Not analysed yet</dt><dd>re-read this file</dd>`}</dl>
+    <div class="verdict"><label for="debVerdict">Your verdict <select id="debVerdict"><option value="">Automatic: ${esc(ENDINGS[auto][0])}</option>${VERDICTS.map((v) => `<option value="${v}"${verdicts[f.id] === v ? " selected" : ""}>${esc(ENDINGS[v][0])}</option>`).join("")}</select></label>
+    <span class="note">You know what happened better than the track does. Your verdict replaces the automatic one in the counts and takeaways. "Landed on purpose" takes the flight out of the numbers. Saved on this device.</span></div></div>`;
+  if (hasAn(f)) debAlt($("#cDebAlt"), f, fin);
+  $("#debOpen").addEventListener("click", () => openFlight(f, g.short));
+  $("#debClose").addEventListener("click", () => { D.sel = null; renderDebrief(filtered()); });
+  $("#debVerdict").addEventListener("change", (e) => {
+    if (e.target.value) verdicts[f.id] = e.target.value; else delete verdicts[f.id];
+    saveVerdicts();
+    if (e.target.value === "purpose") D.sel = null;
+    renderDebrief(filtered());
+  });
+}
+
 /* ---------- render ---------- */
 function renderFilters() {
   const years = [...new Set(state.flights.map((f) => f.year))].sort((a, b) => b - a);
@@ -1986,9 +2546,10 @@ function render() {
   const list = filtered();
   $("#sampleBanner").hidden = !state.sample;
   document.querySelectorAll("nav.pages button").forEach((b) => b.setAttribute("aria-current", b.dataset.page === state.page ? "page" : "false"));
-  ["dash", "explore", "where"].forEach((p) => { $(`#page-${p}`).hidden = p !== state.page; });
+  ["dash", "explore", "where", "debrief"].forEach((p) => { $(`#page-${p}`).hidden = p !== state.page; });
   if (state.page === "explore") renderDive(list);
   else if (state.page === "where") renderWhere(list);
+  else if (state.page === "debrief") renderDebrief(list);
   else {
     renderTiles(list);
     if (mainMap) mainMap.invalidate();
@@ -2002,8 +2563,9 @@ function render() {
   }
   try { localStorage.setItem("lt-tab", state.tab); } catch (e) { /* ignore */ }
 }
+const PAGES = ["dash", "explore", "where", "debrief"];
 function setPage(p) {
-  if (!["dash", "explore", "where"].includes(p)) p = "dash";
+  if (!PAGES.includes(p)) p = "dash";
   if (p === "dash" && state.page !== "dash") lastFitKey = "";
   state.page = p;
   try { localStorage.setItem("lt-page", p); } catch (e) { /* ignore */ }
@@ -2157,6 +2719,10 @@ $("#qualSel").addEventListener("change", (e) => { state.where.qual = e.target.va
 $("#calMetric").addEventListener("change", (e) => { state.where.cal = e.target.value; whereChange(); });
 $("#spClose").addEventListener("click", () => { state.where.siteKey = null; $("#siteProfile").hidden = true; });
 $("#spDash").addEventListener("click", () => { state.site = state.where.siteKey; setPage("dash"); });
+const debChange = () => { saveDeb(); renderDebrief(filtered()); };
+const debNum = (id, key, min) => $(id).addEventListener("change", (e) => { const v = parseFloat(e.target.value); if (isFinite(v) && v >= min) { state.deb[key] = v; state.deb.end = null; } debChange(); });
+debNum("#dbSiteN", "siteN", 1); debNum("#dbSiteKm", "siteKm", 1); debNum("#dbCommit", "commitKm", 0.5); debNum("#dbShort", "shortPct", 5);
+$("#dbTandem").addEventListener("change", (e) => { state.deb.tandem = e.target.checked; debChange(); });
 $("#diveSel").addEventListener("change", (e) => { state.dive = e.target.value; try { localStorage.setItem("lt-dive", state.dive); } catch (err) { /* ignore */ } renderDive(filtered()); });
 $("#scX").addEventListener("change", (e) => { state.scX = e.target.value; try { localStorage.setItem("lt-scx", state.scX); } catch (err) { /* ignore */ } scatter($("#cScatter"), filtered()); });
 $("#scY").addEventListener("change", (e) => { state.scY = e.target.value; try { localStorage.setItem("lt-scy", state.scY); } catch (err) { /* ignore */ } scatter($("#cScatter"), filtered()); });
@@ -2257,6 +2823,8 @@ async function dbxSync(quiet) {
     const files = entries.filter((e) => e[".tag"] === "file" && /\.(igc|csv)$/i.test(e.name));
     let seen = {}; try { seen = JSON.parse(lsGet("pg-dbx-seen") || "{}"); } catch (e) { seen = {}; }
     if (state.sample) seen = {};
+    const reread = lsGet("pg-an-v") !== String(AN_V) && state.flights.some((f) => !hasAn(f));
+    if (reread) seen = {}; // once: re-read every file so flights stored before the Debrief page get analysed
     // CSVs first so new flights get their launch names
     const todo = files.filter((e) => seen[e.path_lower] !== e.content_hash).sort((a, b) => /\.csv$/i.test(b.name) - /\.csv$/i.test(a.name));
     if (!todo.length) {
@@ -2271,7 +2839,7 @@ async function dbxSync(quiet) {
     }
     await loadFiles(got);
     for (const e of todo) seen[e.path_lower] = e.content_hash;
-    lsSet("pg-dbx-seen", JSON.stringify(seen)); lsSet("pg-dbx-last", String(Date.now()));
+    lsSet("pg-dbx-seen", JSON.stringify(seen)); lsSet("pg-dbx-last", String(Date.now())); lsSet("pg-an-v", String(AN_V));
     setStatus(`From Dropbox: ${$("#status").textContent}`);
   } catch (e) {
     setStatus(`Dropbox sync didn't work: ${e.message}`);
@@ -2363,8 +2931,10 @@ document.querySelectorAll("#themeChips button").forEach((b) => b.addEventListene
   try { Object.assign(state.where, JSON.parse(localStorage.getItem("lt-where3") || "{}")); } catch (e) { /* ignore */ }
   if (!MEASURES[state.where.measure]) state.where.measure = "airtime";
   try { state.page = localStorage.getItem("lt-page") || "dash"; } catch (e) { state.page = "dash"; }
-  const hp = (location.hash || "").slice(1); if (["dash", "explore", "where"].includes(hp)) state.page = hp;
-  if (!["dash", "explore", "where"].includes(state.page)) state.page = "dash";
+  const hp = (location.hash || "").slice(1); if (PAGES.includes(hp)) state.page = hp;
+  if (!PAGES.includes(state.page)) state.page = "dash";
+  state.deb = { ...DEB_DEF };
+  try { Object.assign(state.deb, JSON.parse(localStorage.getItem("pg-deb1") || "{}"), { sel: null, end: null }); } catch (e) { /* ignore */ }
   mainMap = makeView($("#map"), {});
   applyStyle(st, false);
   state.flights = makeSample(); state.sample = true; render();
