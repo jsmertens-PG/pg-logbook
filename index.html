@@ -730,7 +730,9 @@ function enrich(f) {
   f.xc = row && row.xcKm ? { type: row.xcType, km: row.xcKm, pts: row.xcPts, link: row.link } : null;
   f.offset = row ? row.offset : Math.round(f.lon / 15) * 3600;
   f.offsetGuess = !row;
-  f.glider = (row && row.glider) || f.igcGlider || "";
+  f.gliderRaw = (row && row.glider) || f.igcGlider || "";
+  f.gliderFromCsv = !!(row && row.glider);
+  f.glider = f.gliderRaw;
   f.country = (row && row.country) || f.country || "";
   f.tandem = !!(row && row.tandem) || !!f.tandemSample;
   f.launch = (row && row.launch) || (f.fromFile && f.fromFile.launch) || "";
@@ -753,6 +755,47 @@ function enrich(f) {
   f.xcKm = f.xc ? f.xc.km : f.maxDistKm;
   return f;
 }
+/* ---------- one name per glider ----------
+   The same wing shows up as "OZONE Delta 2" (XContest), "Delta2", "Ozone Delta 2 ML" or "delta-2 (MS)" (instrument
+   headers). The key drops the brand, sizes, punctuation and case; every spelling with the same key gets one name,
+   preferring the XContest spelling. Digits stay, so Delta 2 and Delta 4 remain different gliders. */
+const BRANDS = ["ozone", "u-turn", "uturn", "airdesign", "air design", "ad", "skywalk", "nova", "niviuk", "gin", "gin gliders", "advance", "mac para", "macpara", "phi", "bgd", "supair", "sol", "swing", "dudek", "flow", "triple seven", "777", "icaro", "axis", "apco", "up", "independence", "aircross", "ozone gliders"];
+const SIZES = new Set(["xxs", "xs", "s", "sm", "ms", "m", "ml", "l", "xl", "xxl", "size"]);
+function gliderCanon(name) {
+  let n = (name || "").toLowerCase().normalize("NFKD").replace(/[\u0300-\u036f]/g, "").replace(/[’'`´]/g, "").replace(/\(.*?\)/g, " ").replace(/[^a-z0-9]+/g, " ").trim();
+  for (const b of [...BRANDS].sort((a, b) => b.length - a.length)) {
+    const bb = b.replace(/[^a-z0-9]+/g, " ");
+    if (n.startsWith(bb + " ")) { n = n.slice(bb.length + 1); break; }
+  }
+  // split letter/digit runs so "delta2" and "delta 2" agree, then drop sizes and weight-range numbers
+  const toks = n.replace(/([a-z])(\d)/g, "$1 $2").replace(/(\d)([a-z])/g, "$1 $2").split(" ").filter(Boolean);
+  while (toks.length > 1 && (SIZES.has(toks[toks.length - 1]) || (/^\d+$/.test(toks[toks.length - 1]) && +toks[toks.length - 1] >= 16 && +toks[toks.length - 1] <= 130))) toks.pop();
+  return toks.join("");
+}
+function unifyGliders(flights) {
+  const groups = new Map();
+  for (const f of flights) {
+    const k = gliderCanon(f.gliderRaw ?? f.glider); if (!k) continue;
+    let g = groups.get(k); if (!g) groups.set(k, (g = { csv: new Map(), raw: new Map() }));
+    const m = f.gliderFromCsv ? g.csv : g.raw, nm = (f.gliderRaw ?? f.glider).replace(/\s+/g, " ").trim();
+    m.set(nm, (m.get(nm) || 0) + 1);
+  }
+  // a shortened spelling ("M7" for "Mantra M7") joins the one longer name that ends or starts with it
+  const alias = new Map(), keys = [...groups.keys()];
+  for (const k of keys) {
+    if (k.length < 2 || !(/\d/.test(k) || k.length >= 5)) continue;
+    const hits = keys.filter((K) => K !== k && K.length > k.length && (K.endsWith(k) || K.startsWith(k)));
+    if (hits.length === 1) alias.set(k, hits[0]);
+  }
+  const final = (k) => alias.get(k) || k;
+  for (const [k, K] of alias) { const g = groups.get(K), a = groups.get(k); for (const w of ["csv", "raw"]) for (const [n, c] of a[w]) g[w].set(n, (g[w].get(n) || 0) + c); }
+  const top = (m) => [...m.entries()].sort((a, b) => b[1] - a[1] || b[0].length - a[0].length)[0];
+  const tidy = (n) => { const t = n.replace(/\(.*?\)/g, " ").split(/\s+/).filter(Boolean); while (t.length > 1 && (SIZES.has(t[t.length - 1].toLowerCase()) || /^\d+(-\d+)?\??$/.test(t[t.length - 1]) && +t[t.length - 1].split("-")[0] >= 16)) t.pop(); return t.join(" "); };
+  const label = new Map();
+  for (const [k, g] of groups) label.set(k, top(g.csv) ? top(g.csv)[0] : tidy(top(g.raw)[0]));
+  for (const f of flights) { const k = gliderCanon(f.gliderRaw ?? f.glider); f.glider = k ? label.get(final(k)) : ""; }
+}
+function enrichAll() { state.flights.forEach(enrich); unifyGliders(state.flights); }
 function siteKey(f) { return f.launch ? f.launch.toLowerCase() : `@${f.lat.toFixed(2)},${f.lon.toFixed(2)}`; }
 function siteLabel(f) {
   if (f.launch) return f.launch;
@@ -794,7 +837,7 @@ async function loadFiles(files) {
       seen.add(f.id); state.flights.push(f); added++;
     } catch (e) { bad++; }
   }
-  state.flights.forEach(enrich);
+  enrichAll();
   state.flights.sort((a, b) => a.epoch - b.epoch);
   save();
   const parts = [`Loaded ${added} flight${added === 1 ? "" : "s"}`];
@@ -869,6 +912,7 @@ function makeSample() {
     const f = { id: `ex${k}`, file: "example", epoch: Date.UTC(y, mo - 1, d) + a.tOff * 1000, firstEpoch: 0, lastEpoch: 0, igcGlider: (k % 11 === 5 ? "SKYWALK Join't 3" : y <= 2023 ? "OZONE Mantra M7" : "OZONE Photon"), tandemSample: k % 11 === 5, fromFile: { date: `${y}-${String(mo).padStart(2, "0")}-${String(d).padStart(2, "0")}`, launch: s.name }, ...a };
     flights.push(enrich(f));
   }
+  unifyGliders(flights);
   return flights.sort((a, b) => a.epoch - b.epoch);
 }
 
@@ -2942,7 +2986,7 @@ document.querySelectorAll("#themeChips button").forEach((b) => b.addEventListene
   const saved = await restore();
   if (saved && saved.flights && saved.flights.length) {
     state.flights = saved.flights; state.csvRows = saved.csvRows || []; state.deleted = saved.deleted || []; state.sample = false;
-    state.flights.forEach(enrich);
+    enrichAll();
     setStatus(`${state.flights.length} flights from your last visit, stored in this browser. Nothing is uploaded.`);
     lastFitKey = ""; render();
   }
