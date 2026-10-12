@@ -422,6 +422,12 @@ footer.styles { border-top: 1px solid var(--ink); padding-top: 16px; display: gr
   </div>
 
   <footer class="styles">
+    <span class="eyebrow">Light or dark</span>
+    <div class="presets" id="themeChips" role="group" aria-label="Light or dark">
+      <button type="button" data-t="auto">Auto (follow device)</button>
+      <button type="button" data-t="light">Light</button>
+      <button type="button" data-t="dark">Dark</button>
+    </div>
     <span class="eyebrow">Style</span>
     <div class="chips" id="styleChips" role="group" aria-label="Colour style"></div>
   </footer>
@@ -2319,10 +2325,22 @@ async function dbxBoot() {
   if (dbxConnected()) dbxSync(true);
 }
 
+/* ---------- light / dark ---------- */
+function applyTheme(t) {
+  const root = document.documentElement;
+  if (t === "light" || t === "dark") root.dataset.theme = t; else { delete root.dataset.theme; t = "auto"; }
+  lsSet("lt-theme", t === "auto" ? null : t);
+  document.querySelectorAll("#themeChips button").forEach((b) => b.setAttribute("aria-pressed", b.dataset.t === t));
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) meta.content = isDark() ? "#000000" : "#ffffff";
+}
+document.querySelectorAll("#themeChips button").forEach((b) => b.addEventListener("click", () => applyTheme(b.dataset.t)));
+
 /* ---------- start ---------- */
 (async () => {
   try { const t = localStorage.getItem("lt-tab"); if (t && document.getElementById(`view-${t}`)) state.tab = t; } catch (e) { /* ignore */ }
   let st = "mono"; try { st = localStorage.getItem("lt-style") || "mono"; } catch (e) { /* ignore */ }
+  applyTheme(lsGet("lt-theme") || "auto");
   try { state.basemap = localStorage.getItem("lt-base") || "auto"; } catch (e) { state.basemap = "auto"; }
   try { state.mapMode = localStorage.getItem("lt-mode") || "tracks"; } catch (e) { state.mapMode = "tracks"; }
   $("#modeSel").value = state.mapMode;
