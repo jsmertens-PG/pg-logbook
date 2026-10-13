@@ -739,6 +739,7 @@ function enrich(f) {
   f.country = (row && row.country) || f.country || "";
   f.tandem = !!(row && row.tandem) || !!f.tandemSample;
   f.launch = (row && row.launch) || (f.fromFile && f.fromFile.launch) || "";
+  f.launchRaw = f.launch; f.launchFromCsv = !!(row && row.launch);
   f.launchGuess = false;
   if (!f.launch) {
     // no CSV row or renamed file: borrow the name of an earlier flight that took off within 1.5 km
@@ -798,7 +799,47 @@ function unifyGliders(flights) {
   for (const [k, g] of groups) label.set(k, top(g.csv) ? top(g.csv)[0] : tidy(top(g.raw)[0]));
   for (const f of flights) { const k = gliderCanon(f.gliderRaw ?? f.glider); f.glider = k ? label.get(final(k)) : ""; }
 }
-function enrichAll() { state.flights.forEach(enrich); unifyGliders(state.flights); }
+/* ---------- one name per launch ----------
+   XContest says "Taucho", Leonardo "Tenerife - Taucho" or "TAUCHO (ES)". Names are compared as word sets without
+   case, accents and filler words (launch, takeoff, Startplatz, directions…); two names are the same launch when they
+   share a word (allowing a typo or "oe" for "ö") and their takeoffs are within 3 km, or whatever their names when the
+   takeoffs are within 400 m. The XContest spelling wins. */
+const SITE_STOP = new Set("launch launches takeoff take off start startplatz decollo despegue decolage decollage landing lz to tko w e n s nw ne sw se nnw west east north south nord sud sued ost the de del della la le el di da am an der die das bei im of and monte mont mount mt berg alm alpe hutte hutten huette gipfel peak hill ridge top punta cima pico pizzo sierra valley lake beach club site park mountain kopf spitze joch".split(" "));
+function siteTokens(n) {
+  return (n || "").toLowerCase().normalize("NFKD").replace(/[\u0300-\u036f]/g, "").replace(/ß/g, "ss").replace(/(?<=[a-z])oe|(?<=[a-z])ae|(?<=[a-z])ue/g, (m) => m[0])
+    .replace(/[^a-z0-9]+/g, " ").trim().split(" ").filter((t) => t && !SITE_STOP.has(t));
+}
+function lev1(a, b) { // true when a and b differ by at most one letter (insert, delete or swap)
+  if (a === b) return true; if (Math.abs(a.length - b.length) > 1) return false;
+  let i = 0; while (i < a.length && i < b.length && a[i] === b[i]) i++;
+  return a.slice(i + 1) === b.slice(i + 1) || a.slice(i) === b.slice(i + 1) || a.slice(i + 1) === b.slice(i);
+}
+const tokMatch = (a, b) => (a.length >= 4 && b.length >= 4 && (a === b || (a.length >= 5 && b.length >= 5 && lev1(a, b)) || a.startsWith(b) || b.startsWith(a))) || (/\d/.test(a) && a === b && a.length >= 3);
+function unifySites(flights) {
+  const keyOf = (n) => siteTokens(n).join(" ") || (n || "").toLowerCase().trim();
+  const groups = new Map();
+  for (const f of flights) {
+    if (!f.launchRaw) continue;
+    const k = keyOf(f.launchRaw); let g = groups.get(k);
+    if (!g) groups.set(k, (g = { k, toks: siteTokens(f.launchRaw), lat: 0, lon: 0, n: 0, csv: new Map(), raw: new Map() }));
+    g.lat += f.lat; g.lon += f.lon; g.n++;
+    const m = f.launchFromCsv ? g.csv : g.raw, nm = f.launchRaw.replace(/\s+/g, " ").trim(); m.set(nm, (m.get(nm) || 0) + 1);
+  }
+  const G = [...groups.values()]; G.forEach((g) => { g.lat /= g.n; g.lon /= g.n; });
+  const par = G.map((_, i) => i), find = (i) => (par[i] === i ? i : (par[i] = find(par[i])));
+  for (let i = 0; i < G.length; i++) for (let j = i + 1; j < G.length; j++) {
+    const d = dist(G[i].lat, G[i].lon, G[j].lat, G[j].lon); if (d > 3) continue;
+    const named = d < 0.4 || G[i].toks.some((a) => G[j].toks.some((b) => tokMatch(a, b)));
+    if (named) par[find(i)] = find(j);
+  }
+  const top = (m) => [...m.entries()].sort((a, b) => b[1] - a[1] || a[0].length - b[0].length)[0];
+  const byRoot = new Map();
+  G.forEach((g, i) => { const r = find(i); if (!byRoot.has(r)) byRoot.set(r, { csv: new Map(), raw: new Map() }); const o = byRoot.get(r); for (const w of ["csv", "raw"]) for (const [n, c] of g[w]) o[w].set(n, (o[w].get(n) || 0) + c); });
+  const label = new Map();
+  G.forEach((g, i) => { const o = byRoot.get(find(i)); label.set(g.k, (top(o.csv) || top(o.raw))[0]); });
+  for (const f of flights) { const nm = f.launchRaw || f.launch; if (nm) f.launch = label.get(keyOf(nm)) || nm; }
+}
+function enrichAll() { state.flights.forEach(enrich); unifySites(state.flights); unifyGliders(state.flights); }
 function siteKey(f) { return f.launch ? f.launch.toLowerCase() : `@${f.lat.toFixed(2)},${f.lon.toFixed(2)}`; }
 function siteLabel(f) {
   if (f.launch) return f.launch;
@@ -915,7 +956,8 @@ function makeSample() {
     const f = { id: `ex${k}`, file: "example", epoch: Date.UTC(y, mo - 1, d) + a.tOff * 1000, firstEpoch: 0, lastEpoch: 0, igcGlider: (k % 11 === 5 ? "SKYWALK Join't 3" : y <= 2023 ? "OZONE Mantra M7" : "OZONE Photon"), tandemSample: k % 11 === 5, fromFile: { date: `${y}-${String(mo).padStart(2, "0")}-${String(d).padStart(2, "0")}`, launch: s.name }, ...a };
     flights.push(enrich(f));
   }
-  unifyGliders(flights);
+  flights.forEach((f) => { f.launchRaw = f.launch; f.launchFromCsv = true; });
+  unifySites(flights); unifyGliders(flights);
   return flights.sort((a, b) => a.epoch - b.epoch);
 }
 
