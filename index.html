@@ -267,6 +267,7 @@ footer.styles { border-top: 1px solid var(--ink); padding-top: 16px; display: gr
 .chips button i { height: 8px; display: block; border: 1px solid var(--line); }
 .chips button[aria-pressed="true"] { border-color: var(--ink); box-shadow: inset 0 0 0 1px var(--ink); }
 @media (prefers-reduced-motion: no-preference) { button { transition: border-color .15s; } }
+#cCal svg { max-width: 720px; margin-inline: auto; }
 .lessons { list-style: none; margin: 0; padding: 0; display: grid; counter-reset: l; }
 .lessons li { display: grid; grid-template-columns: 34px 1fr auto; gap: 12px; align-items: baseline; padding: 12px 0; border-bottom: 1px solid var(--line); counter-increment: l; }
 .lessons li::before { content: counter(l); font-family: var(--font-display); font-size: 1.5rem; line-height: 1; }
@@ -311,6 +312,7 @@ tbody tr.sel td { background: var(--sunk); }
     <button type="button" data-page="debrief">Debrief</button>
   </nav>
 
+
   <div id="status" class="status" role="status">Everything is read in your browser. Nothing is uploaded.</div>
   <div id="dbxBox" hidden></div>
   <div id="sampleBanner" class="banner" hidden>These are example flights. Load your IGC folder (renamed or original XContest/Leonardo files, plus any XContest CSVs) to replace them with yours, or drag the folder onto this page.</div>
@@ -345,10 +347,11 @@ tbody tr.sel td { background: var(--sunk); }
   </nav>
 
   <section id="view-overview" class="grid2">
+    <div class="panel full"><header><h2>Season calendar</h2><span class="note">airtime per month</span></header><div class="chart" id="cCal"></div></div>
     <div class="panel"><header><h2>Airtime by year</h2><span class="note">hours · click a bar to filter</span></header><div class="chart" id="cYears"></div></div>
-    <div class="panel"><header><h2>Season calendar</h2><span class="note">airtime per month</span></header><div class="chart" id="cCal"></div></div>
-    <div class="panel"><header><h2>When you launch</h2><span class="note">local takeoff time · flights</span></header><div class="chart" id="cHour"></div></div>
+    <div class="panel"><header><h2>Airtime by month</h2><span class="note">hours · all years added together</span></header><div class="chart" id="cMonths"></div></div>
     <div class="panel"><header><h2>How long you stay up</h2><span class="note">flights by airtime</span></header><div class="chart" id="cDur"></div></div>
+    <div class="panel"><header><h2>When you launch and land</h2><span class="note">local time · smoothed</span></header><div class="chart" id="cHour"></div><div class="yearkey" id="hourKey"></div></div>
     <div class="panel full"><header><h2 id="scTitle">Airtime against XC distance</h2><span class="maphead"><label for="scX" class="colorbar">X <select id="scX"></select></label><label for="scY" class="colorbar">Y <select id="scY"></select></label><label for="scColor" class="colorbar">Colour <select id="scColor"></select></label><label for="scSize" class="colorbar">Size <select id="scSize"></select></label></span></header><span class="note" id="scNote">XC distance where XContest scored it, otherwise furthest point from launch · click a dot to open the flight</span><div class="chart" id="cScatter"></div><div class="yearkey" id="yearKey"></div></div>
     <div class="panel full"><header><h2>Top sites by airtime</h2><span class="note">click a bar to filter to that site</span></header><div class="chart" id="cSites"></div></div>
   </section>
@@ -2503,15 +2506,48 @@ function renderTiles(list) {
     t("Sites · gliders", `${sites} · ${gl}`, `${new Set(list.map((f) => f.year)).size} seasons`);
   $("#tiles").querySelectorAll("[data-id]").forEach((el) => el.addEventListener("click", () => openFlight(list.find((f) => f.id === el.dataset.id), list)));
 }
+/* launch and landing times as smoothed curves (Gaussian kernel, 25 min wide), scaled to flights per hour */
+function launchLand(el, list) {
+  if (!list.length) { el.innerHTML = `<p class="muted">No flights.</p>`; $("#hourKey").innerHTML = ""; return; }
+  const L = list.map((f) => f.hour), D = list.map((f) => f.hour + f.airtime / 3600);
+  const all = [...L, ...D], lo = Math.max(0, Math.floor(Math.min(...all)) - 1), hi = Math.min(26, Math.ceil(Math.max(...all)) + 1);
+  const bw = 25 / 60, k = 1 / (bw * Math.sqrt(2 * Math.PI)), steps = 160;
+  const dens = (arr) => Array.from({ length: steps + 1 }, (_, i) => { const x = lo + ((hi - lo) * i) / steps; let s = 0; for (const v of arr) { const z = (x - v) / bw; s += Math.exp(-0.5 * z * z); } return [x, s * k]; });
+  const dl = dens(L), dd = dens(D);
+  const W = 560, H = 240, ml = 40, mr = 10, mt = 16, mb = 26, iw = W - ml - mr, ih = H - mt - mb;
+  const { max, step } = niceMax(Math.max(...dl.map((p) => p[1]), ...dd.map((p) => p[1])));
+  const X = (x) => ml + ((x - lo) / (hi - lo)) * iw, Y = (y) => mt + ih - (y / max) * ih;
+  const mono = state.style === "mono", cL = mono ? css("--ink") : cm(0.3), cD = mono ? css("--muted") : cm(0.82);
+  let s = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Launch and landing times">`;
+  for (let v = 0; v <= max + 1e-9; v += step) s += `<line class="grid" x1="${ml}" x2="${W - mr}" y1="${Y(v)}" y2="${Y(v)}"/><text x="${ml - 6}" y="${Y(v) + 4}" text-anchor="end">${+v.toFixed(1)}</text>`;
+  const every = hi - lo > 14 ? 2 : 1;
+  for (let h = lo; h <= hi; h++) if ((h - lo) % every === 0) s += `<text x="${X(h)}" y="${H - 8}" text-anchor="middle">${String(h % 24).padStart(2, "0")}</text>`;
+  const path = (d) => d.map((p, i) => `${i ? "L" : "M"}${X(p[0]).toFixed(1)},${Y(p[1]).toFixed(1)}`).join("");
+  for (const [d, c] of [[dd, cD], [dl, cL]]) {
+    s += `<path d="${path(d)}L${X(hi)},${Y(0)}L${X(lo)},${Y(0)}Z" style="fill:${c};fill-opacity:.22;stroke:none;pointer-events:none"/>`;
+    s += `<path d="${path(d)}" style="fill:none;stroke:${c};stroke-width:2.2;stroke-linejoin:round;pointer-events:none"/>`;
+  }
+  for (let h = lo; h < hi; h++) {
+    const nl = L.filter((v) => v >= h && v < h + 1).length, nd = D.filter((v) => v >= h && v < h + 1).length, hh = String(h % 24).padStart(2, "0");
+    s += `<rect class="hit" x="${X(h)}" y="${mt}" width="${X(h + 1) - X(h)}" height="${ih}" data-tip="${esc(`${hh}:00–${hh}:59<br><b>${nl}</b> launch${nl === 1 ? "" : "es"} · <b>${nd}</b> landing${nd === 1 ? "" : "s"}`)}"/>`;
+  }
+  s += `<text x="${ml}" y="10" style="font-size:10px">flights per hour</text>`;
+  el.innerHTML = s + `</svg>`;
+  bindTips(el);
+  const peak = (d) => d.reduce((a, p) => (p[1] > a[1] ? p : a))[0];
+  $("#hourKey").innerHTML = `<span><i style="background:${cL};border-color:${cL}"></i>launch · most often around ${hhmm(peak(dl))}</span><span><i style="background:${cD};border-color:${cD}"></i>landing · most often around ${hhmm(peak(dd))}</span>`;
+}
 function renderOverview(list) {
   const years = [...new Set(state.flights.map((f) => f.year))].sort();
   const byYear = years.map((y) => { const fl = list.filter((f) => f.year === y); const s = fl.reduce((a, f) => a + f.airtime, 0); return { label: years.length > 8 ? `'${String(y).slice(2)}` : String(y), value: s / 3600, year: y, on: state.year === String(y), tip: `${y}<br><b>${fmtH(s)}</b> h · ${fl.length} flights` }; });
   barChart($("#cYears"), byYear, { yFmt: (v) => `${+v.toFixed(1)}`, onClick: (d) => { state.year = state.year === String(d.year) ? "all" : String(d.year); render(); } });
+  const byMonth = MONTHS.map((m, i) => {
+    const fl = list.filter((f) => f.month === i + 1), s = fl.reduce((a, f) => a + f.airtime, 0), yrs = new Set(fl.map((f) => f.year)).size;
+    return { label: m, value: s / 3600, tip: `${MONTH_LONG[i]}, all years together<br><b>${fmtH(s)}</b> h · ${fl.length} flight${fl.length === 1 ? "" : "s"}${yrs ? ` in ${yrs} year${yrs === 1 ? "" : "s"}` : ""}` };
+  });
+  barChart($("#cMonths"), byMonth, { yFmt: (v) => `${+v.toFixed(1)}` });
   calendar($("#cCal"), list);
-  const hours = Array.from({ length: 24 }, (_, h) => ({ label: String(h).padStart(2, "0"), value: 0, h }));
-  list.forEach((f) => hours[Math.floor(f.hour) % 24].value++);
-  const used = hours.filter((h) => h.value).map((h) => h.h); const lo = used.length ? Math.max(0, Math.min(...used) - 1) : 6, hi = used.length ? Math.min(23, Math.max(...used) + 1) : 20;
-  barChart($("#cHour"), hours.slice(lo, hi + 1).map((h) => ({ ...h, tip: `${h.label}:00–${h.label}:59<br><b>${h.value}</b> flight${h.value === 1 ? "" : "s"}` })), { yFmt: (v) => +v.toFixed(1), labelEvery: hi - lo > 14 ? 2 : 1 });
+  launchLand($("#cHour"), list);
   const bins = [[0, 900, "<15m"], [900, 1800, "15–30m"], [1800, 3600, "30–60m"], [3600, 7200, "1–2h"], [7200, 10800, "2–3h"], [10800, 14400, "3–4h"], [14400, 18000, "4–5h"], [18000, 1e9, "5h+"]];
   barChart($("#cDur"), bins.map(([a, b, l]) => { const n = list.filter((f) => f.airtime >= a && f.airtime < b).length; return { label: l, value: n, tip: `${l}<br><b>${n}</b> flight${n === 1 ? "" : "s"}` }; }), { yFmt: (v) => +v.toFixed(1) });
   scatter($("#cScatter"), list);
