@@ -268,6 +268,16 @@ footer.styles { border-top: 1px solid var(--ink); padding-top: 16px; display: gr
 .chips button[aria-pressed="true"] { border-color: var(--ink); box-shadow: inset 0 0 0 1px var(--ink); }
 @media (prefers-reduced-motion: no-preference) { button { transition: border-color .15s; } }
 #cCal svg { max-width: 720px; margin-inline: auto; }
+.flist { max-height: 390px; overflow-y: auto; }
+.flq { font: inherit; font-size: .88rem; color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 6px 10px; min-height: 34px; width: min(280px, 100%); }
+#flightHost .card.inline { width: 100%; margin: 0; padding: 18px 0 0; border: 0; border-top: 1px solid var(--ink); border-radius: 0; }
+.replay { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; }
+.replay select { min-height: 30px; padding: 3px 8px; font-size: .8rem; }
+.verdict-head { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: baseline; }
+.vtype { font-size: .72rem; text-transform: uppercase; letter-spacing: .14em; color: var(--muted); }
+.vbig { font-family: var(--font-display); font-size: clamp(1.7rem, 4vw, 2.4rem); line-height: 1.1; border-bottom: 4px solid; padding-bottom: 2px; }
+.vline { margin: 0; max-width: 80ch; }
+.vbadges { display: flex; flex-wrap: wrap; gap: 6px; }
 .lessons { list-style: none; margin: 0; padding: 0; display: grid; counter-reset: l; }
 .lessons li { display: grid; grid-template-columns: 34px 1fr auto; gap: 12px; align-items: baseline; padding: 12px 0; border-bottom: 1px solid var(--line); counter-increment: l; }
 .lessons li::before { content: counter(l); font-family: var(--font-display); font-size: 1.5rem; line-height: 1; }
@@ -309,7 +319,8 @@ tbody tr.sel td { background: var(--sunk); }
     <button type="button" data-page="dash" aria-current="page">Dashboard</button>
     <button type="button" data-page="explore">Explore</button>
     <button type="button" data-page="where">Where &amp; when</button>
-    <button type="button" data-page="debrief">Debrief</button>
+    <button type="button" data-page="flight">Flight debrief</button>
+    <button type="button" data-page="debrief">Site debrief</button>
   </nav>
 
 
@@ -443,9 +454,19 @@ tbody tr.sel td { background: var(--sunk); }
   </div>
 
 
+  <div id="page-flight" class="page where" hidden>
+    <div class="panel full">
+      <header><h2>Flight debrief</h2><input id="flQ" class="flq" type="search" placeholder="Search date, site, glider…" aria-label="Search flights"></header>
+      <span class="note" id="flNote"></span>
+      <div class="tablewrap flist"><table id="tFl"></table></div>
+    </div>
+    <div id="flightHost" hidden></div>
+    <div class="panel full" id="flightVerdict" hidden></div>
+  </div>
+
   <div id="page-debrief" class="page where" hidden>
     <div class="panel full intro">
-      <header><h2>Debrief</h2></header>
+      <header><h2>Site debrief</h2></header>
       <p class="lede">Your XC flights that ended short, and what the tracks say about how they ended. Each track is read for its climbs, glides and the wind drift in your circles. Short flights are then compared with your full ones at the same site. Treat the takeaways as leads to check against what you remember of those days.</p>
       <div class="defs">
         <label for="dbSiteN">An XC site has at least <input id="dbSiteN" type="number" min="1" step="1"></label>
@@ -489,7 +510,7 @@ tbody tr.sel td { background: var(--sunk); }
     <div class="statgrid" id="dStats"></div>
     <div class="grid2">
       <div class="panel"><header><h2>Track</h2><span class="note" id="dTrackNote"></span></header><div id="dTrack" class="dmap"></div><span class="note" id="dMapNote">○ launch · ■ landing · shaded by altitude</span></div>
-      <div class="panel"><header><h2>Altitude</h2><span class="note">metres over the flight</span></header><canvas id="dAlt" height="400"></canvas><div class="readout" id="dReadout">Move along the altitude chart or the track to follow the glider.</div></div>
+      <div class="panel"><header><h2>Altitude</h2><span class="note">metres over the flight</span></header><canvas id="dAlt" height="400"></canvas><div class="readout" id="dReadout">Move along the altitude chart or the track to follow the glider.</div><div class="replay"><button type="button" id="dPlay">▶ Replay</button><label for="dSpeed" class="colorbar">Speed <select id="dSpeed"><option value="60">×60</option><option value="150" selected>×150</option><option value="400">×400</option><option value="1000">×1000</option></select></label></div></div>
     </div>
   </div>
 </div>
@@ -2519,6 +2540,136 @@ function renderDebDetail(g) {
   });
 }
 
+/* ---------- Flight debrief: pick a flight from a list, see it inline, replay it, and get a short verdict ---------- */
+const FTYPES = { xc: ["XC flight", "went 5 km or more from launch"], local: ["Local thermalling", "stayed near launch, mostly circling in thermals"], soaring: ["Ridge or dynamic soaring", "stayed near launch with little circling"], sled: ["Sled ride", "under 15 min and never 100 m above launch"] };
+function flightType(f) {
+  const above = f.maxAlt - f.launchAlt, circ = hasAn(f) && f.an.th ? f.an.circ : null;
+  if (f.airtime < 15 * 60 && above < 100) return "sled";
+  if (f.maxDistKm >= 5 || (f.xc && f.xc.km >= 10)) return "xc";
+  if (circ != null ? circ < 0.12 && f.airtime >= 15 * 60 : above < 150 && f.airtime >= 20 * 60) return "soaring";
+  return "local";
+}
+const FCOLS = [
+  ["epoch", "Date", (f) => f.epoch, (f) => `<span class="mono">${f.date}</span> <span class="muted mono">${f.time}</span>`],
+  ["site", "Site", (f) => siteLabel(f).toLowerCase(), (f) => `<span class="site">${esc(siteLabel(f))}</span>`],
+  ["type", "Type", (f) => flightType(f), (f) => esc(FTYPES[flightType(f)][0])],
+  ["airtime", "Airtime", (f) => f.airtime, (f) => fmtH(f.airtime), true],
+  ["xcKm", "XC km", (f) => f.xcKm, (f) => fmtKm(f.xcKm), true],
+  ["maxAlt", "Max alt", (f) => f.maxAlt, (f) => fmtM(f.maxAlt), true],
+  ["gain", "Gain", (f) => f.gain, (f) => fmtM(f.gain), true],
+  ["maxClimb", "Best climb", (f) => f.maxClimb, (f) => f.maxClimb.toFixed(1), true],
+  ["glider", "Glider", (f) => gliderLabel(f).toLowerCase(), (f) => esc(f.glider || "–")],
+];
+function renderFlightPage(list) {
+  const S = state.fsort, col = FCOLS.find((c) => c[0] === S.key) || FCOLS[0], q = (state.fq || "").toLowerCase().trim();
+  let fl = q ? list.filter((f) => `${f.date} ${siteLabel(f)} ${f.glider} ${f.country} ${FTYPES[flightType(f)][0]}`.toLowerCase().includes(q)) : [...list];
+  fl.sort((a, b) => { const x = col[2](a), y = col[2](b); return (x > y ? 1 : x < y ? -1 : 0) * S.dir; });
+  state.flist = fl;
+  $("#flNote").textContent = `${fl.length} flight${fl.length === 1 ? "" : "s"} · click one to debrief it · click a column to sort`;
+  $("#tFl").innerHTML = `<thead><tr>${FCOLS.map((c) => `<th class="sortable${c[4] ? " n" : ""}" data-k="${c[0]}"${c[0] === S.key ? ` data-dir="${S.dir < 0 ? "↓" : "↑"}"` : ""}>${c[1]}</th>`).join("")}</tr></thead><tbody>` +
+    fl.map((f, i) => `<tr data-i="${i}"${state.fsel === f.id ? ` class="sel"` : ""}>${FCOLS.map((c) => `<td${c[4] ? ` class="n"` : ""}>${c[3](f)}</td>`).join("")}</tr>`).join("") + `</tbody>`;
+  $("#tFl").querySelectorAll("th").forEach((th) => th.addEventListener("click", () => {
+    const k = th.dataset.k; state.fsort = { key: k, dir: S.key === k ? -S.dir : (k === "site" || k === "glider" || k === "type" ? 1 : -1) }; renderFlightPage(list);
+  }));
+  $("#tFl").querySelectorAll("tbody tr").forEach((tr) => tr.addEventListener("click", () => selectFlight(fl[+tr.dataset.i])));
+  let f = fl.find((x) => x.id === state.fsel) || list.find((x) => x.id === state.fsel);
+  if (!f && fl.length) f = [...fl].sort((a, b) => b.epoch - a.epoch)[0];
+  if (f) selectFlight(f, true); else { $("#flightVerdict").hidden = true; $("#flightHost").hidden = true; }
+}
+function selectFlight(f, quiet) {
+  state.fsel = f.id;
+  $("#tFl").querySelectorAll("tbody tr").forEach((tr) => tr.classList.toggle("sel", state.flist[+tr.dataset.i] === f));
+  $("#flightHost").hidden = false;
+  openFlight(f, state.flist && state.flist.length ? state.flist : filtered(), true);
+  if (!quiet) requestAnimationFrame(() => $("#flightHost").scrollIntoView({ behavior: "smooth", block: "start" }));
+}
+
+/* ---------- the verdict ---------- */
+const pctBelow = (v, arr) => (arr.length ? (arr.filter((x) => x < v).length + 0.5 * arr.filter((x) => x === v).length) / arr.length : 0.5);
+const rankOf = (v, arr) => 1 + arr.filter((x) => x > v).length;
+function renderVerdict(f) {
+  const box = $("#flightVerdict"); box.hidden = false;
+  const type = flightType(f), T = FTYPES[type];
+  const all = state.flights.filter((x) => !x.tandem || f.tandem);
+  const here = all.filter((x) => siteKey(x) === siteKey(f));
+  const peers = here.length >= 3 ? here : all.filter((x) => flightType(x) === type);
+  const peerName = here.length >= 3 ? `at ${siteLabel(f)}` : `of this type`;
+  const M = [
+    ["Airtime", (x) => x.airtime, (v) => `${fmtH(v)} h`],
+    ["XC distance", (x) => x.xcKm, (v) => `${fmtKm(v)} km`],
+    ["Max altitude", (x) => x.maxAlt, (v) => `${fmtM(v)} m`],
+    ["Above launch", (x) => x.maxAlt - x.launchAlt, (v) => `${fmtM(v)} m`],
+    ["Height gained", (x) => x.gain, (v) => `${fmtM(v)} m`],
+    ["Best climb", (x) => x.maxClimb, (v) => `${v.toFixed(1)} m/s`],
+  ];
+  const keyM = type === "xc" ? [0, 1] : type === "sled" ? [0] : [0, 4];
+  const score = keyM.reduce((a, i) => a + pctBelow(M[i][1](f), peers.map(M[i][1])), 0) / keyM.length;
+  const verdict = type === "sled" ? ["Sled ride", "Down from launch, as sled rides go."] :
+    score >= 0.85 ? ["Top flight", ""] : score >= 0.65 ? ["Good flight", ""] : score >= 0.35 ? ["Typical flight", ""] : score >= 0.15 ? ["Below par", ""] : ["Short one", ""];
+  const keyNames = keyM.map((i) => M[i][0].toLowerCase().replace(/^xc/, "XC")).join(" and ");
+  if (!verdict[1]) verdict[1] = `${type === "xc" ? "Further and longer" : "Longer and higher"} than ${Math.round(score * 100)}% of your ${peers.length} flights ${peerName}, on ${keyNames}.`;
+  // records
+  const badges = [];
+  for (const [n, g] of M.slice(0, 5)) {
+    if (rankOf(g(f), all.map(g)) === 1 && all.length > 1) badges.push(`Personal best · ${n.toLowerCase().replace(/^xc/, "XC")}`);
+    else if (here.length >= 3 && rankOf(g(f), here.map(g)) === 1) badges.push(`Site best · ${n.toLowerCase().replace(/^xc/, "XC")}`);
+  }
+  if (f.tandem) badges.push("Tandem");
+  // anatomy facts
+  const facts = [];
+  if (hasAn(f) && f.an.th) {
+    const us = usefulTh(f), w = windOf(f.an.th), fin = finalOf(f);
+    facts.push(["Climbs", us.length ? `${us.length} · avg ${avg(us.map((t) => t[5])).toFixed(1)} m/s` : "none over 80 m"]);
+    if (us.length) { const b = us.reduce((a, t) => (t[3] - t[2] > a[3] - a[2] ? t : a)); facts.push(["Biggest climb", `+${fmtM(b[3] - b[2])} m at ${b[5].toFixed(1)} m/s`]); }
+    facts.push(["Circling", `${Math.round(f.an.circ * 100)}% of the time`]);
+    const gl = (f.an.gl || []).filter((g) => g[3] > 30);
+    if (gl.length) { const g = gl.reduce((a, x) => (x[2] > a[2] ? x : a)); facts.push(["Longest glide", `${fmtKm(g[2])} km${g[3] > 30 ? ` · 1:${Math.round((g[2] * 1000) / g[3])}` : ""}`]); }
+    if (w) facts.push(["Wind (from circles)", `${Math.round(w.spd)} km/h ${compass(w.from)}`]);
+    if (fin && !fin.none && type === "xc") facts.push(["Last climb left at", `${fmtM(fin.last[3])} m · ${fmtKm(fin.km)} km final glide`]);
+  }
+  facts.push(["Launched → landed", `${f.time} → ${hhmm(f.hour + f.airtime / 3600)}`]);
+  // XC: where it sits against your other XC attempts here (Site debrief rules)
+  let xcLine = "";
+  if (type === "xc") {
+    const s = debData(state.flights).find((x) => x.attempts.includes(f));
+    if (s) {
+      if (s.short.includes(f)) { const k = s.ends.get(f), E = ENDINGS[k]; xcLine = `<p class="vline"><b>Short for an XC here</b> (under ${fmtKm(s.cut)} km). Ended: <b>${esc(E[0])}</b>. ${esc(E[1])}</p>`; }
+      else xcLine = `<p class="vline"><b>A full XC for ${esc(siteLabel(f))}</b>: your median attempt here is ${fmtKm(s.medKm)} km.</p>`;
+    }
+  }
+  const rows = M.map(([n, g, fm]) => {
+    const v = g(f), hv = here.map(g), av = all.map(g);
+    return `<tr><td>${n}</td><td class="n"><b>${fm(v)}</b></td><td class="n">${here.length >= 2 ? fm(median(hv)) : "–"}</td><td class="n">${here.length >= 2 ? `#${rankOf(v, hv)} of ${hv.length}` : "–"}</td><td class="n">#${rankOf(v, av)} of ${av.length}</td></tr>`;
+  }).join("");
+  const col = state.style === "mono" ? css("--ink") : cm(0.15 + 0.85 * (type === "sled" ? 0.2 : score));
+  box.innerHTML = `<header><h2>Debrief</h2></header>
+    <div class="verdict-head"><span class="vtype">${esc(T[0])}</span><span class="vbig" style="border-color:${col}">${esc(verdict[0])}</span></div>
+    <p class="vline">${esc(verdict[1])} <span class="muted">${esc(T[0])}: ${esc(T[1])}.</span></p>
+    ${xcLine}
+    ${badges.length ? `<div class="vbadges">${badges.map((b) => `<span class="ev strong">${esc(b)}</span>`).join("")}</div>` : ""}
+    <div class="grid2"><div class="tablewrap"><table class="static"><thead><tr><th></th><th class="n">This flight</th><th class="n">Median here</th><th class="n">Rank here</th><th class="n">Rank overall</th></tr></thead><tbody>${rows}</tbody></table></div>
+    <dl class="kv debfacts">${facts.map(([a, b]) => `<dt>${a}</dt><dd>${esc(b)}</dd>`).join("")}</dl></div>`;
+}
+
+/* ---------- replay: run the glider along the track ---------- */
+let replay = null;
+function stopReplay() { if (replay) { cancelAnimationFrame(replay.raf); replay = null; } const b = $("#dPlay"); if (b) b.textContent = "▶ Replay"; }
+function startReplay() {
+  const f = state.open; if (!f) return;
+  const tr = f.track, T = tr[tr.length - 1][3];
+  let t = cursorI != null && cursorI < tr.length - 1 ? tr[cursorI][3] : 0, last = performance.now();
+  replay = { raf: 0 }; $("#dPlay").textContent = "❚❚ Pause";
+  const tick = (now) => {
+    if (!replay || state.open !== f) return;
+    t += ((now - last) / 1000) * (+$("#dSpeed").value || 150); last = now;
+    if (t >= T) { setCursor(tr.length - 1); stopReplay(); return; }
+    setCursor(nearestByTime(tr, t));
+    if (detailMap && detailMap.map) { const p = tr[cursorI], m = detailMap.map; if (!m.getBounds().pad(-0.15).contains([p[0], p[1]])) m.panTo([p[0], p[1]], { animate: false }); }
+    replay.raf = requestAnimationFrame(tick);
+  };
+  replay.raf = requestAnimationFrame(tick);
+}
+
 /* ---------- render ---------- */
 function renderFilters() {
   const years = [...new Set(state.flights.map((f) => f.year))].sort((a, b) => b - a);
@@ -2668,10 +2819,11 @@ function render() {
   const list = filtered();
   $("#sampleBanner").hidden = !state.sample;
   document.querySelectorAll("nav.pages button").forEach((b) => b.setAttribute("aria-current", b.dataset.page === state.page ? "page" : "false"));
-  ["dash", "explore", "where", "debrief"].forEach((p) => { $(`#page-${p}`).hidden = p !== state.page; });
+  PAGES.forEach((p) => { $(`#page-${p}`).hidden = p !== state.page; });
   if (state.page === "explore") renderDive(list);
   else if (state.page === "where") renderWhere(list);
   else if (state.page === "debrief") renderDebrief(list);
+  else if (state.page === "flight") renderFlightPage(list);
   else {
     renderTiles(list);
     if (mainMap) mainMap.invalidate();
@@ -2685,10 +2837,11 @@ function render() {
   }
   try { localStorage.setItem("lt-tab", state.tab); } catch (e) { /* ignore */ }
 }
-const PAGES = ["dash", "explore", "where", "debrief"];
+const PAGES = ["dash", "explore", "where", "flight", "debrief"];
 function setPage(p) {
   if (!PAGES.includes(p)) p = "dash";
   if (p === "dash" && state.page !== "dash") lastFitKey = "";
+  if (state.inline && p !== "flight") { stopReplay(); state.open = null; state.inline = false; }
   state.page = p;
   try { localStorage.setItem("lt-page", p); } catch (e) { /* ignore */ }
   try { history.replaceState(null, "", p === "dash" ? location.pathname + location.search : `#${p}`); } catch (e) { /* ignore */ }
@@ -2753,8 +2906,14 @@ function drawDetail() {
   if (detailMap.draw) detailMap.draw();
   drawAlt(f);
 }
-function openFlight(f, list) {
+const CARD = document.querySelector("#sheet .card");
+function openFlight(f, list, inline = false) {
   if (!f) return;
+  stopReplay();
+  state.inline = inline;
+  if (inline) { if (CARD.parentNode !== $("#flightHost")) $("#flightHost").appendChild(CARD); CARD.setAttribute("role", "region"); CARD.removeAttribute("aria-modal"); $("#sheet").hidden = true; document.body.style.overflow = ""; }
+  else if (CARD.parentNode !== $("#sheet")) { $("#sheet").appendChild(CARD); CARD.setAttribute("role", "dialog"); CARD.setAttribute("aria-modal", "true"); }
+  CARD.classList.toggle("inline", inline); $("#dClose").hidden = inline;
   state.open = f; state.openList = list || state.list || [f];
   const ord = [...state.openList].sort((a, b) => a.epoch - b.epoch), i = ord.indexOf(f);
   $("#dPrev").disabled = i <= 0; $("#dNext").disabled = i < 0 || i >= ord.length - 1;
@@ -2767,6 +2926,7 @@ function openFlight(f, list) {
   resetDelete();
   cursorI = null; if (detailMap) detailMap.setMarker(null);
   $("#dReadout").textContent = "Move along the altitude chart or the track to follow the glider.";
+  if (inline) { state.fsel = f.id; renderVerdict(f); $("#tFl").querySelectorAll("tbody tr").forEach((tr) => tr.classList.toggle("sel", state.flist && state.flist[+tr.dataset.i] === f)); requestAnimationFrame(drawDetail); return; }
   $("#sheet").hidden = false; document.body.style.overflow = "hidden";
   requestAnimationFrame(drawDetail);
   $("#dClose").focus();
@@ -2796,13 +2956,17 @@ function deleteOpen() {
   });
   lastFitKey = ""; render();
   const next = ord[i + 1] || ord[i - 1];
-  if (next && state.flights.includes(next)) openFlight(next, state.openList); else closeSheet();
+  if (next && state.flights.includes(next)) openFlight(next, state.openList, state.inline); else closeSheet();
 }
 function step(d) {
   const ord = [...state.openList].sort((a, b) => a.epoch - b.epoch), i = ord.indexOf(state.open);
-  if (ord[i + d]) openFlight(ord[i + d], state.openList);
+  if (ord[i + d]) openFlight(ord[i + d], state.openList, state.inline);
 }
-function closeSheet() { $("#sheet").hidden = true; document.body.style.overflow = ""; state.open = null; hideTip(); }
+function closeSheet() {
+  stopReplay();
+  if (state.inline) { if (state.open) return; $("#flightHost").hidden = true; $("#flightVerdict").hidden = true; return; }
+  $("#sheet").hidden = true; document.body.style.overflow = ""; state.open = null; hideTip();
+}
 function redrawOpen() { if (mainMap) mainMap.queue(); if (state.open) drawDetail(); }
 
 /* ---------- events ---------- */
@@ -2813,7 +2977,7 @@ function redrawOpen() { if (mainMap) mainMap.queue(); if (state.open) drawDetail
     const r = cv.getBoundingClientRect(), t = ((e.clientX - r.left) - altGeom.ml) / altGeom.iw * altGeom.T;
     setCursor(nearestByTime(f.track, Math.max(0, Math.min(altGeom.T, t))));
   };
-  cv.addEventListener("pointerdown", (e) => { cv.setPointerCapture(e.pointerId); move(e); });
+  cv.addEventListener("pointerdown", (e) => { stopReplay(); cv.setPointerCapture(e.pointerId); move(e); });
   cv.addEventListener("pointermove", (e) => { if (e.pointerType === "mouse" || e.buttons) move(e); });
 })();
 $("#pickFolder").addEventListener("change", (e) => { loadFiles(e.target.files); e.target.value = ""; });
@@ -2828,7 +2992,7 @@ $("#dClose").addEventListener("click", closeSheet);
 $("#dPrev").addEventListener("click", () => step(-1));
 $("#dNext").addEventListener("click", () => step(1));
 $("#sheet").addEventListener("click", (e) => { if (e.target.id === "sheet") closeSheet(); });
-document.addEventListener("keydown", (e) => { if (!state.open) return; if (e.key === "Escape") closeSheet(); if (e.key === "ArrowLeft") step(-1); if (e.key === "ArrowRight") step(1); });
+document.addEventListener("keydown", (e) => { if (!state.open) return; if (state.inline && /^(INPUT|SELECT|TEXTAREA)$/.test(document.activeElement.tagName)) return; if (e.key === "Escape" && !state.inline) closeSheet(); if (e.key === "ArrowLeft") step(-1); if (e.key === "ArrowRight") step(1); });
 $("#mIn").addEventListener("click", () => mainMap.zoomBy(2));
 $("#mOut").addEventListener("click", () => mainMap.zoomBy(0.5));
 document.querySelectorAll("nav.pages button").forEach((b) => b.addEventListener("click", () => setPage(b.dataset.page)));
@@ -2845,7 +3009,9 @@ const debChange = () => { saveDeb(); renderDebrief(filtered()); };
 const debNum = (id, key, min) => $(id).addEventListener("change", (e) => { const v = parseFloat(e.target.value); if (isFinite(v) && v >= min) { state.deb[key] = v; state.deb.end = null; } debChange(); });
 debNum("#dbSiteN", "siteN", 1); debNum("#dbSiteKm", "siteKm", 1); debNum("#dbCommit", "commitKm", 0.5); debNum("#dbShort", "shortPct", 5);
 $("#dbTandem").addEventListener("change", (e) => { state.deb.tandem = e.target.checked; debChange(); });
-$("#diveSel").addEventListener("change", (e) => { state.dive = e.target.value; try { localStorage.setItem("lt-dive", state.dive); } catch (err) { /* ignore */ } renderDive(filtered()); });
+$("#dPlay").addEventListener("click", () => (replay ? stopReplay() : startReplay()));
+$("#flQ").addEventListener("input", (e) => { state.fq = e.target.value; renderFlightPage(filtered()); });
+$("#diveSel").addEventListener("change", (e) => { state.dive = e.target.value; try { localStorage.setItem("lt-dive2", state.dive); } catch (err) { /* ignore */ } renderDive(filtered()); });
 $("#scX").addEventListener("change", (e) => { state.scX = e.target.value; try { localStorage.setItem("lt-scx", state.scX); } catch (err) { /* ignore */ } scatter($("#cScatter"), filtered()); });
 $("#scY").addEventListener("change", (e) => { state.scY = e.target.value; try { localStorage.setItem("lt-scy", state.scY); } catch (err) { /* ignore */ } scatter($("#cScatter"), filtered()); });
 $("#scColor").addEventListener("change", (e) => { state.dotColor = e.target.value; try { localStorage.setItem("lt-dotc", state.dotColor); } catch (err) { /* ignore */ } scatter($("#cScatter"), filtered()); });
@@ -3042,7 +3208,8 @@ document.querySelectorAll("#themeChips button").forEach((b) => b.addEventListene
   const axOpts = axisParams().map(([k, n]) => `<option value="${k}">${n}</option>`).join("");
   $("#scX").innerHTML = axOpts; $("#scY").innerHTML = axOpts;
   $("#scX").value = state.scX; $("#scY").value = state.scY;
-  try { state.dive = localStorage.getItem("lt-dive") || "maxClimb"; } catch (e) { state.dive = "maxClimb"; }
+  try { state.dive = localStorage.getItem("lt-dive2") || "xcKm"; } catch (e) { state.dive = "xcKm"; }
+  state.fsort = { key: "epoch", dir: -1 }; state.fq = ""; state.fsel = null;
   $("#diveSel").innerHTML = DIVE_PARAMS.map(([k, n]) => `<option value="${k}">${n}</option>`).join("");
   $("#diveSel").value = state.dive;
   $("#baseSel").innerHTML = BASEMAPS.map(([k, n]) => `<option value="${k}">${n}</option>`).join("");
