@@ -898,13 +898,15 @@ async function loadFiles(files) {
       const p = parseIGC(await igcs[i].text());
       if (!p) { bad++; continue; }
       const f = makeFlight(igcs[i].name, p, analyze(p.fixes));
+      if (igcs[i].dbxPath) f.dbxPath = igcs[i].dbxPath;
       f.nFix = p.fixes.length;
       if (isDeleted(f)) { skippedDel++; continue; }
       const twinIdx = seen.has(f.id) ? state.flights.findIndex((g) => g.id === f.id) : state.flights.findIndex((g) => sameFlight(g, f));
       if (twinIdx >= 0) {
         dup++;
         const keep = richer(state.flights[twinIdx], f);
-        if (keep === f) { seen.add(f.id); state.flights[twinIdx] = f; }
+        if (keep === f) { if (!f.dbxPath && state.flights[twinIdx].dbxPath) f.dbxPath = state.flights[twinIdx].dbxPath; seen.add(f.id); state.flights[twinIdx] = f; }
+        else if (f.dbxPath && !keep.dbxPath) keep.dbxPath = f.dbxPath;
         continue;
       }
       seen.add(f.id); state.flights.push(f); added++;
@@ -2134,7 +2136,7 @@ function renderWhere(list) {
    An XC site: at least N flights of K km or more. An XC attempt: went more than C km from launch.
    Short: XC distance under P % of the median attempt at that site. Everything else here is read from
    the thermals and glides that anatomy() found in each track. */
-const DEB_DEF = { siteN: 3, siteKm: 20, commitKm: 4, shortPct: 50, tandem: false, site: "all", end: null, sel: null };
+const DEB_DEF = { siteN: 3, siteKm: 20, commitKm: 10, shortPct: 50, tandem: false, site: "all", end: null, sel: null };
 const hasAn = (f) => !!(f.an && f.an.v === AN_V);
 const avg = (a) => a.reduce((x, y) => x + y, 0) / a.length;
 const COMPASS = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
@@ -2150,7 +2152,7 @@ const shortCol = () => (state.style === "mono" ? css("--ink") : cm(0.85));
 let verdicts = {};
 try { verdicts = JSON.parse(localStorage.getItem("pg-verdicts") || "{}"); } catch (e) { verdicts = {}; }
 const saveVerdicts = () => { try { localStorage.setItem("pg-verdicts", JSON.stringify(verdicts)); } catch (e) { /* ignore */ } };
-const saveDeb = () => { try { const { sel: _s, end: _e, ...keep } = state.deb; localStorage.setItem("pg-deb1", JSON.stringify(keep)); } catch (e) { /* ignore */ } };
+const saveDeb = () => { try { const { sel: _s, end: _e, ...keep } = state.deb; localStorage.setItem("pg-deb2", JSON.stringify(keep)); } catch (e) { /* ignore */ } };
 
 /* first point more than C km from launch: when, how high, which way */
 const commitMemo = new WeakMap();
@@ -2861,6 +2863,7 @@ function render() {
     if (state.tab === "flights") renderFlights(list);
   }
   try { localStorage.setItem("lt-tab", state.tab); } catch (e) { /* ignore */ }
+  schedulePush();
 }
 const PAGES = ["dash", "explore", "where", "flight", "debrief"];
 function setPage(p) {
@@ -2971,12 +2974,12 @@ function deleteOpen() {
   state.flights = state.flights.filter((x) => x !== f);
   state.openList = state.openList.filter((x) => x !== f);
   if (!state.sample) state.deleted.push({ id: f.id, e: f.epoch, lat: f.lat, lon: f.lon });
-  save();
+  save(); dbxMoveOut(f);
   const label = `${prettyDate(f.date)} · ${siteLabel(f)}`;
   $("#status").innerHTML = `Deleted ${esc(label)}. <button id="undoDel" type="button">Undo</button>`;
   $("#undoDel").addEventListener("click", () => {
     state.flights.push(f); state.flights.sort((a, b) => a.epoch - b.epoch);
-    state.deleted = state.deleted.filter((d) => (typeof d === "string" ? d !== f.id : d.id !== f.id)); save();
+    state.deleted = state.deleted.filter((d) => (typeof d === "string" ? d !== f.id : d.id !== f.id)); save(); dbxMoveBack(f);
     setStatus(`Restored ${label}.`); lastFitKey = ""; render();
   });
   lastFitKey = ""; render();
@@ -3124,39 +3127,142 @@ async function dbxApi(path, body) {
 async function dbxDownload(entry) {
   const r = await fetch("https://content.dropboxapi.com/2/files/download", { method: "POST", headers: { Authorization: `Bearer ${await dbxAccess()}`, "Dropbox-API-Arg": hdrJson({ path: entry.id }) } });
   if (!r.ok) throw new Error(`Dropbox download failed for ${entry.name}`);
-  return new File([await r.blob()], entry.name);
+  const file = new File([await r.blob()], entry.name);
+  file.dbxPath = entry.path_display;
+  return file;
 }
 async function dbxSync(quiet) {
   if (dbxBusy || !dbxConnected()) return;
   dbxBusy = true; renderDbx();
   try {
-    setStatus("Checking Dropbox for flights…");
+    if (!cloudReady) { setStatus("Loading your settings from Dropbox…"); try { await cloudPull(); } catch (e) { /* first time: no settings yet */ } }
+    let seen = {}; try { seen = JSON.parse(lsGet("pg-dbx-seen") || "{}"); } catch (e) { seen = {}; }
+    // a new device (or one with an older analysis): take the ready-made logbook from Dropbox instead of re-reading every IGC
+    const stale = lsGet("pg-an-v") !== String(AN_V) || lsGet("pg-cloud-v") !== "1";
+    let fromCache = false;
+    if (state.sample || !state.flights.length || stale) {
+      setStatus("Loading your logbook from Dropbox…");
+      const lb = await cloudLoadLogbook().catch(() => null);
+      if (lb) {
+        state.flights = lb.flights.filter((f) => !isDeleted(f)); state.csvRows = lb.csvRows || []; state.sample = false; seen = lb.seen || {};
+        enrichAll(); state.flights.sort((a, b) => a.epoch - b.epoch); save(); lastFitKey = ""; render(); fromCache = true;
+        lsSet("pg-an-v", String(AN_V)); lsSet("pg-cloud-v", "1");
+      } else seen = {};
+    }
+    cloudReady = true;
+    setStatus("Checking Dropbox for new flights…");
     let res = await dbxApi("files/list_folder", { path: "", recursive: true, limit: 2000 }), entries = res.entries;
     while (res.has_more) { res = await dbxApi("files/list_folder/continue", { cursor: res.cursor }); entries = entries.concat(res.entries); }
-    const files = entries.filter((e) => e[".tag"] === "file" && /\.(igc|csv)$/i.test(e.name));
-    let seen = {}; try { seen = JSON.parse(lsGet("pg-dbx-seen") || "{}"); } catch (e) { seen = {}; }
-    if (state.sample) seen = {};
-    const reread = lsGet("pg-an-v") !== String(AN_V) && state.flights.some((f) => !hasAn(f));
-    if (reread) seen = {}; // once: re-read every file so flights stored before the Debrief page get analysed
+    const hasCache = entries.some((e) => e.path_lower === `${CLOUD_DIR}/logbook.json`);
+    const files = entries.filter((e) => e[".tag"] === "file" && /\.(igc|csv)$/i.test(e.name) && !skipPath(e.path_lower));
+    const present = new Set(files.map((e) => e.path_lower));
+    // IGCs removed from Dropbox (or moved to _deleted) leave the logbook on every device
+    const gone = state.flights.filter((f) => f.dbxPath && !present.has(f.dbxPath.toLowerCase()));
+    if (gone.length) state.flights = state.flights.filter((f) => !gone.includes(f));
+    for (const k of Object.keys(seen)) if (!present.has(k)) delete seen[k];
     // CSVs first so new flights get their launch names
     const todo = files.filter((e) => seen[e.path_lower] !== e.content_hash).sort((a, b) => /\.csv$/i.test(b.name) - /\.csv$/i.test(a.name));
-    if (!todo.length) {
-      lsSet("pg-dbx-last", String(Date.now()));
-      setStatus(files.length ? `Dropbox is up to date: ${files.filter((e) => /\.igc$/i.test(e.name)).length} IGC files, nothing new.` : "Your Dropbox app folder is empty. Put your IGC files and XContest CSVs in Dropbox → Apps → your app's folder, then sync.");
-      return;
-    }
-    const got = [];
-    for (let i = 0; i < todo.length; i += 6) {
-      setStatus(`Downloading from Dropbox… ${i} of ${todo.length}`);
-      got.push(...(await Promise.all(todo.slice(i, i + 6).map(dbxDownload))));
-    }
-    await loadFiles(got);
-    for (const e of todo) seen[e.path_lower] = e.content_hash;
-    lsSet("pg-dbx-seen", JSON.stringify(seen)); lsSet("pg-dbx-last", String(Date.now())); lsSet("pg-an-v", String(AN_V));
-    setStatus(`From Dropbox: ${$("#status").textContent}`);
+    if (todo.length) {
+      const got = [];
+      for (let i = 0; i < todo.length; i += 6) {
+        setStatus(`Downloading from Dropbox… ${i} of ${todo.length}`);
+        got.push(...(await Promise.all(todo.slice(i, i + 6).map(dbxDownload))));
+      }
+      await loadFiles(got);
+      for (const e of todo) seen[e.path_lower] = e.content_hash;
+    } else if (gone.length) { enrichAll(); save(); lastFitKey = ""; render(); }
+    lsSet("pg-dbx-seen", JSON.stringify(seen)); lsSet("pg-dbx-last", String(Date.now())); lsSet("pg-an-v", String(AN_V)); lsSet("pg-cloud-v", "1");
+    const nIgc = files.filter((e) => /\.igc$/i.test(e.name)).length;
+    if (todo.length || gone.length || !hasCache) { setStatus("Saving your logbook to Dropbox…"); await cloudSaveLogbook(seen); }
+    const parts = [];
+    if (todo.length) parts.push(`${todo.length} new or changed file${todo.length === 1 ? "" : "s"} read`);
+    if (gone.length) parts.push(`${gone.length} flight${gone.length === 1 ? "" : "s"} removed (no longer in Dropbox)`);
+    if (fromCache) parts.unshift("Logbook loaded from Dropbox");
+    setStatus(!files.length ? "Your Dropbox app folder is empty. Put your IGC files and XContest CSVs in Dropbox → Apps → your app's folder, then sync."
+      : `${parts.length ? parts.join(" · ") + ". " : "Dropbox is up to date. "}${state.flights.length} flights from ${nIgc} IGC files.${cloudCanWrite ? "" : " (Settings and the ready-made logbook can't be saved to Dropbox yet; see the Dropbox panel.)"}`);
   } catch (e) {
     setStatus(`Dropbox sync didn't work: ${e.message}`);
   } finally { dbxBusy = false; renderDbx(); }
+}
+
+/* ---------- one online place: the ready-made logbook and your settings live in Dropbox → Apps → <app>/_logbook ----------
+   logbook.json: every analysed flight (so a new device needs one download, not hundreds)
+   settings.json: deleted flights, Site debrief verdicts, colour scheme, light/dark and page settings
+   Deleting a flight moves its IGC to _deleted/ in Dropbox. Needs the files.content.write permission. */
+const CLOUD_DIR = "/_logbook";
+const PREF_KEYS = ["lt-style", "lt-theme", "lt-base", "lt-mode", "lt-dotc", "lt-dots", "lt-scx", "lt-scy", "lt-dive2", "lt-where3", "pg-deb2", "pg-verdicts"];
+const skipPath = (p) => /^\/(_logbook|_deleted)(\/|$)/i.test(p);
+let cloudReady = false, cloudCanWrite = true, cloudApplying = false, cloudPushT = 0, cloudCacheT = 0, cloudLast = "";
+async function dbxGetJson(path) {
+  const r = await fetch("https://content.dropboxapi.com/2/files/download", { method: "POST", headers: { Authorization: `Bearer ${await dbxAccess()}`, "Dropbox-API-Arg": hdrJson({ path }) } });
+  if (r.status === 409) return null;
+  if (!r.ok) throw new Error(`Dropbox: ${(await r.text()).slice(0, 160)}`);
+  try { return JSON.parse(await r.text()); } catch (e) { return null; }
+}
+async function dbxPut(path, text) {
+  const r = await fetch("https://content.dropboxapi.com/2/files/upload", { method: "POST", headers: { Authorization: `Bearer ${await dbxAccess()}`, "Dropbox-API-Arg": hdrJson({ path, mode: "overwrite", mute: true }), "Content-Type": "application/octet-stream" }, body: text });
+  if (!r.ok) { const t = await r.text(); if (/scope|permission/i.test(t)) { cloudCanWrite = false; renderDbx(); } throw new Error(`Dropbox: ${t.slice(0, 160)}`); }
+}
+const prefsSnapshot = () => { const p = {}; for (const k of PREF_KEYS) { const v = lsGet(k); if (v != null) p[k] = v; } return p; };
+const cloudBody = () => JSON.stringify({ prefs: prefsSnapshot(), deleted: state.deleted });
+function schedulePush() {
+  if (!cloudReady || cloudApplying || !cloudCanWrite || state.sample || !dbxConnected()) return;
+  clearTimeout(cloudPushT); cloudPushT = setTimeout(cloudPush, 2000);
+}
+async function cloudPush() {
+  const body = cloudBody(); if (body === cloudLast) return;
+  const t = Date.now();
+  try { await dbxPut(`${CLOUD_DIR}/settings.json`, JSON.stringify({ v: 1, updated: t, ...JSON.parse(body) })); cloudLast = body; lsSet("pg-cloud-t", String(t)); } catch (e) { /* shown in the Dropbox panel */ }
+}
+async function cloudPull() {
+  const s = await dbxGetJson(`${CLOUD_DIR}/settings.json`);
+  if (!s) { cloudLast = ""; return; }
+  if ((s.updated || 0) <= (+lsGet("pg-cloud-t") || 0)) { cloudLast = ""; return; } // this device is newer: it will push
+  cloudApplying = true;
+  try {
+    for (const k of PREF_KEYS) lsSet(k, s.prefs && s.prefs[k] != null ? s.prefs[k] : null);
+    state.deleted = Array.isArray(s.deleted) ? s.deleted : [];
+    state.flights = state.flights.filter((f) => !isDeleted(f));
+    lsSet("pg-cloud-t", String(s.updated || Date.now()));
+    reloadPrefs();
+    cloudLast = cloudBody();
+  } finally { cloudApplying = false; }
+}
+/* settings that came from another device: put them into effect here */
+function reloadPrefs() {
+  const J = (k, d) => { try { return JSON.parse(lsGet(k) || "null") || d; } catch (e) { return d; } };
+  verdicts = J("pg-verdicts", {});
+  state.where = { measure: "airtime", value: 120, bomb: 60, tandem: false, cal: "air", months: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12], siteKey: null, ...J("lt-where3", {}) };
+  state.deb = { ...DEB_DEF, ...J("pg-deb2", {}), sel: state.deb ? state.deb.sel : null, end: null };
+  state.basemap = lsGet("lt-base") || "auto"; state.mapMode = lsGet("lt-mode") || "tracks";
+  state.dotColor = lsGet("lt-dotc") || "maxAlt"; state.dotSize = lsGet("lt-dots") || "none";
+  state.scX = lsGet("lt-scx") || "xcKm"; state.scY = lsGet("lt-scy") || "airtime"; state.dive = lsGet("lt-dive2") || "xcKm";
+  [["#modeSel", state.mapMode], ["#baseSel", state.basemap], ["#scColor", state.dotColor], ["#scSize", state.dotSize], ["#scX", state.scX], ["#scY", state.scY], ["#diveSel", state.dive]].forEach(([s, v]) => { const el = $(s); if (el) el.value = v; });
+  applyTheme(lsGet("lt-theme") || "auto");
+  if (mainMap && mainMap.setBase) mainMap.setBase();
+  applyStyle(lsGet("lt-style") || "mono");
+}
+async function cloudLoadLogbook() {
+  const j = await dbxGetJson(`${CLOUD_DIR}/logbook.json`);
+  return j && j.v === AN_V && Array.isArray(j.flights) && j.flights.length ? j : null;
+}
+async function cloudSaveLogbook(seen) {
+  if (!cloudCanWrite || state.sample) return;
+  try { seen = seen || JSON.parse(lsGet("pg-dbx-seen") || "{}"); } catch (e) { seen = {}; }
+  try { await dbxPut(`${CLOUD_DIR}/logbook.json`, JSON.stringify({ v: AN_V, saved: Date.now(), flights: state.flights, csvRows: state.csvRows, seen })); } catch (e) { /* shown in the Dropbox panel */ }
+}
+function scheduleCacheSave() { if (!dbxConnected() || !cloudCanWrite) return; clearTimeout(cloudCacheT); cloudCacheT = setTimeout(() => cloudSaveLogbook(), 4000); }
+/* deleting moves the IGC to _deleted/ in Dropbox, undo moves it back */
+async function dbxMoveOut(f) {
+  if (!f.dbxPath || !dbxConnected() || !cloudCanWrite) return;
+  try {
+    const r = await dbxApi("files/move_v2", { from_path: f.dbxPath, to_path: `/_deleted/${f.dbxPath.split("/").pop()}`, autorename: true });
+    f.dbxDeletedPath = r.metadata.path_display; scheduleCacheSave();
+  } catch (e) { if (/scope|permission/i.test(e.message)) { cloudCanWrite = false; renderDbx(); } }
+}
+async function dbxMoveBack(f) {
+  if (!f.dbxDeletedPath || !dbxConnected()) return;
+  try { await dbxApi("files/move_v2", { from_path: f.dbxDeletedPath, to_path: f.dbxPath, autorename: false }); delete f.dbxDeletedPath; scheduleCacheSave(); } catch (e) { /* stays in _deleted */ }
 }
 function renderDbx() {
   const btn = $("#dbxBtn"), box = $("#dbxBox");
@@ -3167,10 +3273,15 @@ function renderDbx() {
   if (box.hidden) return;
   if (dbxConnected()) {
     const last = +lsGet("pg-dbx-last");
-    box.innerHTML = `<div class="dbx"><b>Dropbox is connected.</b> Your IGC files and XContest CSVs go in <b>Dropbox → Apps → your app's folder</b>. The logbook syncs every time it opens.${last ? ` Last checked ${new Date(last).toLocaleString()}.` : ""}
-      <span class="actions"><button type="button" id="dbxSyncNow">Sync now</button><button type="button" id="dbxOff">Disconnect this device</button><button type="button" id="dbxClose">Close</button></span></div>`;
+    box.innerHTML = `<div class="dbx"><b>Dropbox is connected.</b> Your IGC files and XContest CSVs go in <b>Dropbox → Apps → your app's folder</b>. The logbook syncs every time it opens, and keeps your analysed logbook and settings in its <b>_logbook</b> folder there, so every device shows the same thing.${last ? ` Last checked ${new Date(last).toLocaleString()}.` : ""}
+      ${cloudCanWrite ? "" : `<span class="note"><b>One more step to keep everything in Dropbox:</b> in the Dropbox App Console open your app → <b>Permissions</b>, tick <b>files.content.write</b>, click <b>Submit</b>. Then click “Disconnect this device” below and connect again.</span>`}
+      <span class="actions"><button type="button" id="dbxSyncNow">Sync now</button><button type="button" id="dbxLink">Copy set-up link for another device</button><button type="button" id="dbxOff">Disconnect this device</button><button type="button" id="dbxClose">Close</button></span></div>`;
+    $("#dbxLink").addEventListener("click", async () => {
+      const link = `${dbxRedirect()}?dbxkey=${encodeURIComponent(lsGet("pg-dbx-key") || "")}`;
+      try { await navigator.clipboard.writeText(link); $("#dbxLink").textContent = "Link copied: open it on the other device"; } catch (e) { prompt("Open this link on the other device:", link); }
+    });
     $("#dbxSyncNow").addEventListener("click", () => dbxSync(false));
-    $("#dbxOff").addEventListener("click", () => { lsSet("pg-dbx-refresh", null); lsSet("pg-dbx-seen", null); dbxTok = null; setStatus("Disconnected this device from Dropbox. Your flights stay in the logbook."); renderDbx(); });
+    $("#dbxOff").addEventListener("click", () => { lsSet("pg-dbx-refresh", null); lsSet("pg-dbx-seen", null); dbxTok = null; cloudReady = false; cloudCanWrite = true; setStatus("Disconnected this device from Dropbox. Your flights stay in the logbook."); renderDbx(); });
     $("#dbxClose").addEventListener("click", () => { box.hidden = true; });
     return;
   }
@@ -3198,6 +3309,10 @@ async function dbxBoot() {
   if (!dbxAvailable()) return;
   $("#dbxBtn").addEventListener("click", () => { if (dbxConnected() && $("#dbxBox").hidden) dbxSync(false); $("#dbxBox").hidden = false; renderDbx(); });
   const q = new URLSearchParams(location.search);
+  if (q.get("dbxkey")) {
+    lsSet("pg-dbx-key", q.get("dbxkey")); history.replaceState(null, "", location.pathname + location.hash);
+    if (!dbxConnected()) { $("#dbxBox").hidden = false; renderDbx(); setStatus("Set-up link opened: tap Connect Dropbox and sign in to see your logbook here."); return; }
+  }
   if (q.get("code") || q.get("error")) {
     history.replaceState(null, "", location.pathname + location.hash);
     if (q.get("error")) { setStatus(`Dropbox sign-in was cancelled (${q.get("error_description") || q.get("error")}).`); return; }
@@ -3214,6 +3329,7 @@ function applyTheme(t) {
   document.querySelectorAll("#themeChips button").forEach((b) => b.setAttribute("aria-pressed", b.dataset.t === t));
   const meta = document.querySelector('meta[name="theme-color"]');
   if (meta) meta.content = isDark() ? "#000000" : "#ffffff";
+  schedulePush();
 }
 document.querySelectorAll("#themeChips button").forEach((b) => b.addEventListener("click", () => applyTheme(b.dataset.t)));
 
@@ -3248,7 +3364,7 @@ document.querySelectorAll("#themeChips button").forEach((b) => b.addEventListene
   const hp = (location.hash || "").slice(1); if (PAGES.includes(hp)) state.page = hp;
   if (!PAGES.includes(state.page)) state.page = "dash";
   state.deb = { ...DEB_DEF };
-  try { Object.assign(state.deb, JSON.parse(localStorage.getItem("pg-deb1") || "{}"), { sel: null, end: null }); } catch (e) { /* ignore */ }
+  try { Object.assign(state.deb, JSON.parse(localStorage.getItem("pg-deb2") || "{}"), { sel: null, end: null }); } catch (e) { /* ignore */ }
   mainMap = makeView($("#map"), {});
   applyStyle(st, false);
   state.flights = makeSample(); state.sample = true; render();
