@@ -316,7 +316,7 @@ tbody tr.sel td { background: var(--sunk); }
         <input id="pickFolder" type="file" webkitdirectory directory multiple>
       </label>
       <label class="btn" for="pickFiles">Add files
-        <input id="pickFiles" type="file" multiple accept=".igc,.IGC,.csv">
+        <input id="pickFiles" type="file" multiple>
       </label>
       <button id="dbxBtn" type="button" hidden>Connect Dropbox</button>
       <span id="clearBox" class="confirm"><button id="clearBtn" type="button">Clear</button></span>
@@ -3008,8 +3008,8 @@ function redrawOpen() { if (mainMap) mainMap.queue(); if (state.open) drawDetail
   cv.addEventListener("pointerdown", (e) => { stopReplay(); cv.setPointerCapture(e.pointerId); move(e); });
   cv.addEventListener("pointermove", (e) => { if (e.pointerType === "mouse" || e.buttons) move(e); });
 })();
-$("#pickFolder").addEventListener("change", (e) => { loadFiles(e.target.files); e.target.value = ""; });
-$("#pickFiles").addEventListener("change", (e) => { loadFiles(e.target.files); e.target.value = ""; });
+$("#pickFolder").addEventListener("change", (e) => { addFiles(e.target.files); e.target.value = ""; });
+$("#pickFiles").addEventListener("change", (e) => { addFiles(e.target.files); e.target.value = ""; });
 $("#fYear").addEventListener("change", (e) => { state.year = e.target.value; render(); });
 $("#fSite").addEventListener("change", (e) => { state.site = e.target.value; render(); });
 $("#fGlider").addEventListener("change", (e) => { state.glider = e.target.value; render(); });
@@ -3071,7 +3071,7 @@ window.addEventListener("drop", async (e) => {
   const out = [], items = [...(e.dataTransfer.items || [])];
   if (items.length && items[0].webkitGetAsEntry) { const entries = items.map((it) => it.webkitGetAsEntry()).filter(Boolean); for (const en of entries) await walkEntry(en, out); }
   else out.push(...e.dataTransfer.files);
-  loadFiles(out);
+  addFiles(out);
 });
 const onTheme = () => { if (state.basemap === "auto" && mainMap) { mainMap.setBase(); if (detailMap) detailMap.setBase(); } applyStyle(state.style); };
 matchMedia("(prefers-color-scheme: dark)").addEventListener("change", onTheme);
@@ -3199,9 +3199,34 @@ async function dbxGetJson(path) {
   if (!r.ok) throw new Error(`Dropbox: ${(await r.text()).slice(0, 160)}`);
   try { return JSON.parse(await r.text()); } catch (e) { return null; }
 }
-async function dbxPut(path, text) {
-  const r = await fetch("https://content.dropboxapi.com/2/files/upload", { method: "POST", headers: { Authorization: `Bearer ${await dbxAccess()}`, "Dropbox-API-Arg": hdrJson({ path, mode: "overwrite", mute: true }), "Content-Type": "application/octet-stream" }, body: text });
+async function dbxPut(path, body, mode = "overwrite") {
+  const r = await fetch("https://content.dropboxapi.com/2/files/upload", { method: "POST", headers: { Authorization: `Bearer ${await dbxAccess()}`, "Dropbox-API-Arg": hdrJson({ path, mode, autorename: mode === "add", mute: true }), "Content-Type": "application/octet-stream" }, body });
   if (!r.ok) { const t = await r.text(); if (/scope|permission/i.test(t)) { cloudCanWrite = false; renderDbx(); } throw new Error(`Dropbox: ${t.slice(0, 160)}`); }
+  return r.json().catch(() => ({}));
+}
+/* files added on this device (Add files, Load folder, drag and drop) also go up to Dropbox, so every device gets them.
+   Files whose name is already in Dropbox are not uploaded again. They go into the "Added in the app" folder. */
+async function addFiles(list) {
+  const files = [...list].filter((f) => /\.(igc|csv)$/i.test(f.name));
+  if (!files.length || state.sample || !dbxAvailable() || !dbxConnected() || !cloudCanWrite) { await loadFiles(list); if (dbxConnected()) scheduleCacheSave(); return; }
+  let seen = {}; try { seen = JSON.parse(lsGet("pg-dbx-seen") || "{}"); } catch (e) { seen = {}; }
+  const known = new Set(Object.keys(seen).map((p) => p.split("/").pop()));
+  const up = files.filter((f) => !known.has(f.name.toLowerCase()));
+  let done = 0, failed = 0;
+  for (let i = 0; i < up.length; i += 4) {
+    setStatus(`Copying to Dropbox… ${i} of ${up.length}`);
+    await Promise.all(up.slice(i, i + 4).map(async (f) => {
+      try {
+        const m = await dbxPut(`/Added in the app/${f.name}`, f, "add");
+        if (m.path_lower) { seen[m.path_lower] = m.content_hash; f.dbxPath = m.path_display; done++; }
+      } catch (e) { failed++; }
+    }));
+  }
+  lsSet("pg-dbx-seen", JSON.stringify(seen));
+  await loadFiles(files);
+  scheduleCacheSave();
+  const note = [done && `${done} file${done === 1 ? "" : "s"} copied to Dropbox (Added in the app)`, up.length < files.length && `${files.length - up.length} already there`, failed && `${failed} couldn't be copied${cloudCanWrite ? "" : " (Dropbox needs write permission, see the Dropbox panel)"}`].filter(Boolean).join(" · ");
+  if (note) setStatus(`${$("#status").textContent} ${note}.`);
 }
 const prefsSnapshot = () => { const p = {}; for (const k of PREF_KEYS) { const v = lsGet(k); if (v != null) p[k] = v; } return p; };
 const cloudBody = () => JSON.stringify({ prefs: prefsSnapshot(), deleted: state.deleted });
