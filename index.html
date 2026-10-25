@@ -805,12 +805,25 @@ function gliderCanon(name) {
   while (toks.length > 1 && (SIZES.has(toks[toks.length - 1]) || (/^\d+$/.test(toks[toks.length - 1]) && +toks[toks.length - 1] >= 16 && +toks[toks.length - 1] <= 130))) toks.pop();
   return toks.join("");
 }
+/* Jerome's own corrections: names some sources gave his wings, mapped to the wing it really was */
+const MY_GLIDERS = [
+  [(k) => k.includes("vampire"), "AIRDESIGN Volt 2"],
+  [(k) => k === "d2" || k === "myvehicle", "OZONE Delta 2"],
+  [(k) => k.includes("delta3"), "OZONE Delta 4"],
+  [(k) => k === "joint3", "SKYWALK Join't 2"],
+  [(k) => k === "", "GIN Atlas"],
+];
+function gName(f) {
+  const raw = (f.gliderRaw ?? f.glider ?? "").replace(/\s+/g, " ").trim(), k = gliderCanon(raw);
+  const hit = MY_GLIDERS.find(([t]) => t(k));
+  return hit ? [hit[1], true] : [raw, !!f.gliderFromCsv];
+}
 function unifyGliders(flights) {
   const groups = new Map();
   for (const f of flights) {
-    const k = gliderCanon(f.gliderRaw ?? f.glider); if (!k) continue;
+    const [nm, sure] = gName(f), k = gliderCanon(nm); if (!k) continue;
     let g = groups.get(k); if (!g) groups.set(k, (g = { csv: new Map(), raw: new Map() }));
-    const m = f.gliderFromCsv ? g.csv : g.raw, nm = (f.gliderRaw ?? f.glider).replace(/\s+/g, " ").trim();
+    const m = sure ? g.csv : g.raw;
     m.set(nm, (m.get(nm) || 0) + 1);
   }
   // a shortened spelling ("M7" for "Mantra M7") joins the one longer name that ends or starts with it
@@ -826,7 +839,7 @@ function unifyGliders(flights) {
   const tidy = (n) => { const t = n.replace(/\(.*?\)/g, " ").split(/\s+/).filter(Boolean); while (t.length > 1 && (SIZES.has(t[t.length - 1].toLowerCase()) || /^\d+(-\d+)?\??$/.test(t[t.length - 1]) && +t[t.length - 1].split("-")[0] >= 16)) t.pop(); return t.join(" "); };
   const label = new Map();
   for (const [k, g] of groups) label.set(k, top(g.csv) ? top(g.csv)[0] : tidy(top(g.raw)[0]));
-  for (const f of flights) { const k = gliderCanon(f.gliderRaw ?? f.glider); f.glider = k ? label.get(final(k)) : ""; }
+  for (const f of flights) { const k = gliderCanon(gName(f)[0]); f.glider = k ? label.get(final(k)) : ""; }
 }
 /* ---------- one name per launch ----------
    XContest says "Taucho", Leonardo "Tenerife - Taucho" or "TAUCHO (ES)". Names are compared as word sets without
