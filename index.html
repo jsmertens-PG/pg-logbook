@@ -49,6 +49,7 @@
 }
 :root[data-style="kawaii"][data-theme="dark"] { --bg: #1d1015; --surface: #28161e; --sunk: #23131a; --ink: #fbfdfb; --muted: #f98eaa; --line: #5a2a3c; --land: #2e1a22; }
 
+[hidden] { display: none !important; }
 * { box-sizing: border-box; }
 body { background: var(--bg); color: var(--ink); font: 15px/1.55 var(--font-body); }
 .wrap { max-width: 1200px; margin: 0 auto; padding-inline: 20px; padding-block: 28px 40px; display: grid; gap: 22px; }
@@ -286,6 +287,19 @@ footer.styles { border-top: 1px solid var(--ink); padding-top: 16px; display: gr
 .vbig { font-family: var(--font-display); font-size: clamp(1.7rem, 4vw, 2.4rem); line-height: 1.1; border-bottom: 4px solid; padding-bottom: 2px; }
 .vline { margin: 0; max-width: 80ch; }
 .vbadges { display: flex; flex-wrap: wrap; gap: 6px; }
+.settings { display: grid; gap: 14px; border: 1px solid var(--ink); padding: 16px 18px; border-radius: var(--radius); background: var(--surface); }
+.settings > header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--line); padding-bottom: 6px; }
+.setgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); gap: 16px 28px; }
+.setgrid > div { display: grid; gap: 8px; align-content: start; }
+#setBtn[aria-expanded="true"] { border-color: var(--ink); box-shadow: inset 0 0 0 1px var(--ink); }
+/* phones: the four pages become a tab bar at the bottom */
+@media (max-width: 700px) {
+  nav.pages { position: fixed; left: 0; right: 0; bottom: 0; z-index: 1500; margin: 0; gap: 0; justify-content: space-around; flex-wrap: nowrap;
+    background: color-mix(in srgb, var(--bg) 94%, transparent); backdrop-filter: blur(6px); border-top: 1px solid var(--line); padding: 4px 6px calc(4px + env(safe-area-inset-bottom, 0px)); }
+  nav.pages button { flex: 1 1 0; font-size: 1.02rem; padding: 10px 2px 8px; border-bottom: 0; border-top: 3px solid transparent; }
+  nav.pages button[aria-current="page"] { border-top-color: var(--ink); }
+  .wrap { padding-bottom: calc(84px + env(safe-area-inset-bottom, 0px)); }
+}
 .lessons { list-style: none; margin: 0; padding: 0; display: grid; counter-reset: l; }
 .lessons li { display: grid; grid-template-columns: 34px 1fr auto; gap: 12px; align-items: baseline; padding: 12px 0; border-bottom: 1px solid var(--line); counter-increment: l; }
 .lessons li::before { content: counter(l); font-family: var(--font-display); font-size: 1.5rem; line-height: 1; }
@@ -319,35 +333,63 @@ tbody tr.sel td { background: var(--sunk); }
         <input id="pickFiles" type="file" multiple>
       </label>
       <button id="dbxBtn" type="button" hidden>Connect Dropbox</button>
-      <span id="clearBox" class="confirm"><button id="clearBtn" type="button">Clear</button></span>
+      <button id="setBtn" type="button" aria-label="Settings">⚙ Settings</button>
     </div>
   </header>
 
   <nav class="pages" aria-label="Pages">
-    <button type="button" data-page="dash" aria-current="page">Dashboard</button>
-    <button type="button" data-page="explore">Explore</button>
-    <button type="button" data-page="where">Where &amp; when</button>
-    <button type="button" data-page="flight">Flight debrief</button>
-    <button type="button" data-page="debrief">Site debrief</button>
+    <button type="button" data-page="dash" aria-current="page">Overview</button>
+    <button type="button" data-page="flight">Flights</button>
+    <button type="button" data-page="sites">Sites</button>
+    <button type="button" data-page="explore">Trends</button>
   </nav>
-
 
   <div id="status" class="status" role="status">Everything is read in your browser. Nothing is uploaded.</div>
   <div id="dbxBox" hidden></div>
+  <section id="settings" class="settings" hidden aria-label="Settings">
+    <header><h2>Settings</h2><button type="button" id="setClose">Done</button></header>
+    <div class="setgrid">
+      <div><span class="eyebrow">Good flights and bomb-outs</span>
+            <div class="defs">
+        <label for="gMeasure">A good flight is <select id="gMeasure"><option value="airtime">airtime of at least</option><option value="xcKm">XC distance of at least</option><option value="gain">height gained of at least</option></select></label>
+        <label for="gValue"><input id="gValue" type="number" min="0" step="any"> <span id="gUnit">min</span></label>
+        <label for="bValue">A bomb-out is shorter than <input id="bValue" type="number" min="1" step="1"> min</label>
+        <label for="incTandem" class="check"><input id="incTandem" type="checkbox"> Include tandem flights</label>
+      </div></div>
+      <div><span class="eyebrow">XC sites and short flights</span>
+            <div class="defs">
+        <label for="dbSiteN">An XC site has at least <input id="dbSiteN" type="number" min="1" step="1"></label>
+        <label for="dbSiteKm">flights of <input id="dbSiteKm" type="number" min="1" step="1"> km or more</label>
+        <label for="dbCommit">An XC attempt goes more than <input id="dbCommit" type="number" min="0.5" step="0.5"> km from launch</label>
+        <label for="dbShort">Short means under <input id="dbShort" type="number" min="5" max="100" step="5"> % of your median attempt there</label>
+        <label for="dbTandem" class="check"><input id="dbTandem" type="checkbox"> Include tandem flights</label>
+      </div></div>
+      <div><span class="eyebrow">Light or dark</span>
+          <div class="presets" id="themeChips" role="group" aria-label="Light or dark">
+      <button type="button" data-t="auto">Auto (follow device)</button>
+      <button type="button" data-t="light">Light</button>
+      <button type="button" data-t="dark">Dark</button>
+    </div></div>
+      <div><span class="eyebrow">Your flights in this browser</span>
+      <div class="defs"><span id="clearBox" class="confirm"><button id="clearBtn" type="button">Clear</button></span></div></div>
+    </div>
+    <span class="eyebrow">Colour scheme</span>
+    <div class="chips" id="styleChips" role="group" aria-label="Colour style"></div>
+  </section>
   <div id="sampleBanner" class="banner" hidden>These are example flights. Load your IGC folder (renamed or original XContest/Leonardo files, plus any XContest CSVs) to replace them with yours, or drag the folder onto this page.</div>
   <div id="dropHint" class="drop" hidden>Drop IGC files, CSVs or a whole folder</div>
 
-  <div class="filters">
+  <div class="filters" id="filters">
     <label for="fYear">Year <select id="fYear"></select></label>
     <label for="fSite">Site <select id="fSite"></select></label>
     <label for="fGlider">Glider <select id="fGlider"></select></label>
     <button id="fReset" type="button" hidden>Show all flights</button>
   </div>
 
+  <!-- 1 · Overview: how's my flying going? -->
   <div id="page-dash" class="page">
   <section class="tiles" id="tiles" aria-label="Totals"></section>
-
-  <section class="panel">
+    <section class="panel">
     <header><h2>Every track</h2><span class="maphead"><label for="baseSel" class="colorbar">Background <select id="baseSel"></select></label><label for="modeSel" class="colorbar">Show <select id="modeSel"><option value="tracks">Tracks</option><option value="heat">Heatmap</option><option value="both">Tracks + heatmap</option></select></label><span class="colorbar"><span id="cbLabel">max alt</span> <span id="cbLo"></span><i id="cbBar"></i><span id="cbHi"></span></span></span></header>
     <div class="mapbox">
       <div id="map" aria-label="Map of all flight tracks"></div>
@@ -356,115 +398,18 @@ tbody tr.sel td { background: var(--sunk); }
     </div>
     <span class="note" id="mapHelp">Drag to pan, scroll or use + and − to zoom. Click a site circle to fly there, click a track to open the flight. Tracks are coloured by each flight's maximum altitude.</span>
   </section>
-
-  <nav class="tabs" role="tablist">
-    <button role="tab" id="tab-overview" aria-selected="true" data-tab="overview">Overview</button>
-    <button role="tab" id="tab-gliders" aria-selected="false" data-tab="gliders">Gliders</button>
-    <button role="tab" id="tab-sites" aria-selected="false" data-tab="sites">Sites</button>
-    <button role="tab" id="tab-records" aria-selected="false" data-tab="records">Records</button>
-    <button role="tab" id="tab-flights" aria-selected="false" data-tab="flights">All flights</button>
-  </nav>
-
-  <section id="view-overview" class="grid2">
+  <section class="grid2">
     <div class="panel full"><header><h2>Season calendar</h2><span class="note">airtime per month</span></header><div class="chart" id="cCal"></div></div>
     <div class="panel"><header><h2>Airtime by year</h2><span class="note">hours · click a bar to filter</span></header><div class="chart" id="cYears"></div></div>
     <div class="panel"><header><h2>Airtime by month</h2><span class="note">hours · all years added together</span></header><div class="chart" id="cMonths"></div></div>
-    <div class="panel"><header><h2>How long you stay up</h2><span class="note">flights by airtime</span></header><div class="chart" id="cDur"></div></div>
-    <div class="panel"><header><h2>When you launch and land</h2><span class="note">local time · smoothed</span></header><div class="chart" id="cHour"></div><div class="yearkey" id="hourKey"></div></div>
-    <div class="panel full"><header><h2 id="scTitle">Airtime against XC distance</h2><span class="maphead"><label for="scX" class="colorbar">X <select id="scX"></select></label><label for="scY" class="colorbar">Y <select id="scY"></select></label><label for="scColor" class="colorbar">Colour <select id="scColor"></select></label><label for="scSize" class="colorbar">Size <select id="scSize"></select></label></span></header><span class="note" id="scNote">XC distance where XContest scored it, otherwise furthest point from launch · click a dot to open the flight</span><div class="chart" id="cScatter"></div><div class="yearkey" id="yearKey"></div></div>
-    <div class="panel full"><header><h2>Top sites by airtime</h2><span class="note">click a bar to filter to that site</span></header><div class="chart" id="cSites"></div></div>
+    <div class="panel full"><header><h2>Records</h2><span class="note">your top 3 · click one to open it</span></header><div class="records" id="records"></div></div>
   </section>
-
-  <section id="view-gliders" hidden style="display:grid;gap:24px">
-    <div class="panel"><header><h2>Glider timeline</h2><span class="note">one tick per flight, taller = longer · click a glider to filter everything to it</span></header><div class="chart" id="cLanes"></div></div>
-    <div class="tablewrap"><table id="tGliders"></table></div>
-  </section>
-
-  <section id="view-sites" hidden>
-    <div class="tablewrap"><table id="tSites"></table></div>
-  </section>
-
-  <section id="view-records" hidden>
-    <div class="records" id="records"></div>
-  </section>
-
-  <section id="view-flights" hidden style="display:grid;gap:12px">
-    <div class="toolbar">
-      <input id="q" type="search" placeholder="Search site, glider or date">
-      <span class="muted" id="flightCount"></span>
-    </div>
-    <div class="tablewrap"><table id="tFlights"></table></div>
-  </section>
-
   </div>
 
-  <div id="page-explore" class="page grid2" hidden>
-    <div class="panel full dive"><header><h2>Explore a parameter over time</h2><label for="diveSel" class="colorbar">Parameter <select id="diveSel"></select></label></header><span class="note" id="xNote"></span></div>
-    <div class="panel"><header><h2>Distribution</h2><span class="note" id="xHistNote"></span></header><div class="chart" id="cXHist"></div></div>
-    <div class="panel"><header><h2>Progression by year</h2><span class="note">each dot a flight · click a dot to open it</span></header><div class="chart" id="cXYear"></div></div>
-    <div class="panel"><header><h2>Through the season</h2><span class="note">average by month</span></header><div class="chart" id="cXMonth"></div></div>
-    <div class="panel"><header><h2>Personal best over time</h2><span class="note">each step is a new record · click a point to open it</span></header><div class="chart" id="cXRec"></div></div>
-    <div class="panel full"><header><h2>By site</h2><span class="note">average per site with 3 or more flights · best flight in the tooltip</span></header><div class="chart" id="cXSite"></div></div>
-  </div>
-
-  <div id="page-where" class="page where" hidden>
-    <div class="panel full intro">
-      <header><h2>Where &amp; when</h2></header>
-      <p class="lede">What your own flying says about where to go, and when. It's built from the days you flew, so it shows what those days delivered, not how often a place is flyable. Use it to pick candidates, then check the weather records.</p>
-      <div class="defs">
-        <label for="gMeasure">A good flight is <select id="gMeasure"><option value="airtime">airtime of at least</option><option value="xcKm">XC distance of at least</option><option value="gain">height gained of at least</option></select></label>
-        <label for="gValue"><input id="gValue" type="number" min="0" step="any"> <span id="gUnit">min</span></label>
-        <label for="bValue">A bomb-out is shorter than <input id="bValue" type="number" min="1" step="1"> min</label>
-        <label for="incTandem" class="check"><input id="incTandem" type="checkbox"> Include tandem flights</label>
-      </div>
-    </div>
-
+  <!-- 2 · Flights: what happened on this flight? -->
+    <div id="page-flight" class="page where" hidden>
     <div class="panel full">
-      <header><h2>Pick months <span class="q">Where should I go at this time of year?</span></h2></header>
-      <div class="presets" id="monthPresets" role="group" aria-label="Month presets"></div>
-      <div class="months" id="monthChips" role="group" aria-label="Months"></div>
-      <p class="summary" id="monthSummary"></p>
-      <div class="cards" id="siteCards"></div>
-    </div>
-
-    <div class="panel full big"><header><h2>Reliability against upside <span class="q">Which sites deliver reliably, and which deliver big?</span></h2></header><span class="note">Sites with 3 or more flights in the months you picked. Further right, more of your flights there were good. Higher up, your best quarter of flights there went further. Bubble size is the number of flights; the dashed lines are your overall averages.</span><div class="chart" id="cRel"></div></div>
-
-    <div class="panel full">
-      <header><h2>Site calendar <span class="q">When has each site worked for me?</span></h2><span class="maphead"><label for="calMetric" class="colorbar">Show <select id="calMetric"><option value="air">Airtime</option><option value="flights">Flights</option><option value="good">Good flights</option><option value="rate">Good-flight rate</option><option value="median">Median airtime</option><option value="best">Best flight</option></select></label></span></header>
-      <span class="note">Sites with 2 or more flights, ranked by what the squares show. Click a square to list those flights, a site name to open its profile, or a month to add it to your selection.</span>
-      <div class="chart" id="cSiteCal"></div>
-      <div id="cellList"></div>
-    </div>
-
-
-    <div class="panel full siteprof" id="siteProfile" hidden>
-      <header><div class="t"><span class="eyebrow" id="spEyebrow"></span><h2 id="spTitle"></h2></div><span class="actions"><button id="spDash" type="button">Show on dashboard</button><button id="spClose" type="button">Close</button></span></header>
-      <div class="statrow" id="spStats"></div>
-      <div class="grid2">
-        <div class="panel"><header><h2>Months <span class="q">When does this site work?</span></h2><span class="note">flights per month · darker = higher good-flight rate</span></header><div class="chart" id="cSpMonths"></div></div>
-        <div class="panel"><header><h2>When to launch here <span class="q">When should I be in the air here?</span></h2><span class="note">takeoff time against airtime · filled = good flight</span></header><div class="chart" id="cSpHour"></div></div>
-      </div>
-      <div class="panel"><header><h2>Best days here <span class="q">What did my best days here look like?</span></h2><span class="note">click a row to open the flight</span></header><div class="tablewrap"><table id="tSpBest"></table></div></div>
-    </div>
-
-    <div class="grid2">
-      <div class="panel"><header><h2>Which days you fly <span class="q">Am I only flying on weekends?</span></h2><span class="note">flying days by weekday</span></header><div class="chart" id="cDow"></div></div>
-      <div class="panel"><header><h2>When good flights launch <span class="q">What time should I be ready on launch?</span></h2><span class="note">flights by local takeoff hour · darker = more of them good</span></header><div class="chart" id="cGoodHour"></div></div>
-    </div>
-
-    <div class="panel full"><header><h2>Your flying rhythm <span class="q">How often, and how regularly, do I get out?</span></h2><label for="qualSel" class="colorbar">Quality shows <select id="qualSel"><option value="good">Good flights</option><option value="rate">Good-flight rate</option><option value="air">Airtime</option><option value="best">Best flight</option></select></label></header><div class="statrow" id="rhythmStats"></div>
-      <div class="grid2">
-        <div class="panel"><header><h2>Quantity</h2><span class="note">flying days per month</span></header><div class="chart" id="cRhythm"></div></div>
-        <div class="panel"><header><h2>Quality</h2><span class="note" id="qualNote">good flights per month</span></header><div class="chart" id="cQuality"></div></div>
-      </div></div>
-
-    <div class="panel full"><header><h2>Trips away <span class="q">Do trips pay off compared with flying at home?</span></h2></header><span class="note">Your home area each year is where you flew most that year. A trip is a run of flying days elsewhere, with no more than 4 days between them.</span><div class="statrow" id="tripStats"></div><div class="tablewrap"><table id="tTrips"></table></div></div>
-  </div>
-
-
-  <div id="page-flight" class="page where" hidden>
-    <div class="panel full">
-      <header><h2>Flight debrief</h2><input id="flQ" class="flq" type="search" placeholder="Search date, site, glider…" aria-label="Search flights"></header>
+      <header><h2>Flights</h2><input id="flQ" class="flq" type="search" placeholder="Search date, site, glider…" aria-label="Search flights"></header>
       <span class="note" id="flNote"></span>
       <div class="tablewrap flist"><table id="tFl"></table></div>
     </div>
@@ -472,40 +417,73 @@ tbody tr.sel td { background: var(--sunk); }
     <div class="panel full" id="flightVerdict" hidden></div>
   </div>
 
-  <div id="page-debrief" class="page where" hidden>
-    <div class="panel full intro">
-      <header><h2>Site debrief</h2></header>
-      <p class="lede">Your XC flights that ended short, and what the tracks say about how they ended. Each track is read for its climbs, glides and the wind drift in your circles. Short flights are then compared with your full ones at the same site. Treat the takeaways as leads to check against what you remember of those days.</p>
-      <div class="defs">
-        <label for="dbSiteN">An XC site has at least <input id="dbSiteN" type="number" min="1" step="1"></label>
-        <label for="dbSiteKm">flights of <input id="dbSiteKm" type="number" min="1" step="1"> km or more</label>
-        <label for="dbCommit">An XC attempt goes more than <input id="dbCommit" type="number" min="0.5" step="0.5"> km from launch</label>
-        <label for="dbShort">Short means under <input id="dbShort" type="number" min="5" max="100" step="5"> % of your median attempt there</label>
-        <label for="dbTandem" class="check"><input id="dbTandem" type="checkbox"> Include tandem flights</label>
-      </div>
-      <div id="debOld" class="banner" hidden></div>
+  <!-- 3 · Sites: where should I fly, and what do I need to know there? -->
+  <div id="page-sites" class="page where" hidden>
+    <div id="sitesAll" class="page where">
+          <div class="panel full">
+      <header><h2>Pick months <span class="q">Where should I go at this time of year?</span></h2></header>
+      <div class="presets" id="monthPresets" role="group" aria-label="Month presets"></div>
+      <div class="months" id="monthChips" role="group" aria-label="Months"></div>
+      <p class="summary" id="monthSummary"></p>
+      <div class="cards" id="siteCards"></div>
     </div>
-    <div class="panel full"><header><h2>Your XC sites <span class="q">Where do my XC flights end short?</span></h2></header><div class="cards" id="debCards"></div></div>
-    <div class="panel full" id="debLessonPanel"><header><h2 id="debLessonTitle">Takeaways</h2></header><span class="note" id="debLessonNote"></span><ol class="lessons" id="debLessons"></ol></div>
-    <div class="grid2" id="debGrid">
+      <div class="panel full big"><header><h2>Reliability against upside <span class="q">Which sites deliver reliably, and which deliver big?</span></h2></header><span class="note">Sites with 3 or more flights in the months you picked. Further right, more of your flights there were good. Higher up, your best quarter of flights there went further. Bubble size is the number of flights; the dashed lines are your overall averages.</span><div class="chart" id="cRel"></div></div>
+          <div class="panel full">
+      <header><h2>Site calendar <span class="q">When has each site worked for me?</span></h2><span class="maphead"><label for="calMetric" class="colorbar">Show <select id="calMetric"><option value="air">Airtime</option><option value="flights">Flights</option><option value="good">Good flights</option><option value="rate">Good-flight rate</option><option value="median">Median airtime</option><option value="best">Best flight</option></select></label></span></header>
+      <span class="note">Sites with 2 or more flights, ranked by what the squares show. Click a square to list those flights, a site name to open its profile, or a month to add it to your selection.</span>
+      <div class="chart" id="cSiteCal"></div>
+      <div id="cellList"></div>
+    </div>
+      <div class="panel full" id="xcAll">
+        <div class="panel full"><header><h2>XC sites <span class="q">Where do my XC flights end short?</span></h2></header><span class="note">Click a site for its takeaways, how short flights ended and where you landed.</span><div class="cards" id="debCards"></div></div>
+        <div id="debOld" class="banner" hidden></div>
+      </div>
+    </div>
+    <div id="siteOne" class="page where" hidden>
+          <div class="panel full siteprof" id="siteProfile">
+      <header><div class="t"><span class="eyebrow" id="spEyebrow"></span><h2 id="spTitle"></h2></div><span class="actions"><button id="spDash" type="button">Show its flights on the Overview</button><button id="spClose" type="button">← All sites</button></span></header>
+      <div class="statrow" id="spStats"></div>
+      <div class="grid2">
+        <div class="panel"><header><h2>Months <span class="q">When does this site work?</span></h2><span class="note">flights per month · darker = higher good-flight rate</span></header><div class="chart" id="cSpMonths"></div></div>
+        <div class="panel"><header><h2>When to launch here <span class="q">When should I be in the air here?</span></h2><span class="note">takeoff time against airtime · filled = good flight</span></header><div class="chart" id="cSpHour"></div></div>
+      </div>
+      <div class="panel"><header><h2>Best days here <span class="q">What did my best days here look like?</span></h2><span class="note">click a row to open the flight</span></header><div class="tablewrap"><table id="tSpBest"></table></div></div>
+    </div>
+      <div id="siteXc" class="page where">
+        <div id="lessonSlot"><div class="panel full" id="debLessonPanel"><header><h2 id="debLessonTitle">Takeaways</h2></header><span class="note" id="debLessonNote"></span><ol class="lessons" id="debLessons"></ol></div></div>
+            <div class="grid2" id="debGrid">
       <div class="panel"><header><h2>How short flights ended <span class="q">How do I ground myself?</span></h2><span class="note">click a bar to list those flights</span></header><div class="chart" id="cDebEnd"></div><dl class="kv endkey" id="debEndKey"></dl></div>
       <div class="panel"><header><h2>Short against full <span class="q">What did I do differently?</span></h2><span class="note">medians</span></header><div class="tablewrap"><table id="tDebCmp" class="static"></table></div></div>
     </div>
-    <div class="panel full" id="debMapPanel"><header><h2>Where they ended <span class="q">Where do I land out here?</span></h2></header><span class="note">Grey: full flights · coloured: short flights (click one) · ● landing · ○ where you left the last good climb · dashed rings: spots you landed more than once</span><div id="debMap" class="dmap"></div></div>
-    <div class="panel full" id="debListPanel"><header><h2 id="debListTitle">Short flights</h2><span class="note">click a flight to see how it ended</span></header><div class="tablewrap"><table id="tDebShort"></table></div></div>
-    <div class="panel full siteprof" id="debDetail" hidden></div>
+        <div class="panel full" id="debMapPanel"><header><h2>Where they ended <span class="q">Where do I land out here?</span></h2></header><span class="note">Grey: full flights · coloured: short flights (click one) · ● landing · ○ where you left the last good climb · dashed rings: spots you landed more than once</span><div id="debMap" class="dmap"></div></div>
+        <div class="panel full" id="debListPanel"><header><h2 id="debListTitle">Short flights</h2><span class="note">click a flight to see how it ended</span></header><div class="tablewrap"><table id="tDebShort"></table></div></div>
+        <div class="panel full siteprof" id="debDetail" hidden></div>
+      </div>
+      <p class="muted" id="siteNoXc" hidden></p>
+    </div>
   </div>
 
-  <footer class="styles">
-    <span class="eyebrow">Light or dark</span>
-    <div class="presets" id="themeChips" role="group" aria-label="Light or dark">
-      <button type="button" data-t="auto">Auto (follow device)</button>
-      <button type="button" data-t="light">Light</button>
-      <button type="button" data-t="dark">Dark</button>
-    </div>
-    <span class="eyebrow">Style</span>
-    <div class="chips" id="styleChips" role="group" aria-label="Colour style"></div>
-  </footer>
+  <!-- 4 · Trends: how am I changing over time? -->
+  <div id="page-explore" class="page grid2" hidden>
+        <div class="panel full dive"><header><h2>Explore a parameter over time</h2><label for="diveSel" class="colorbar">Parameter <select id="diveSel"></select></label></header><span class="note" id="xNote"></span></div>
+    <div class="panel"><header><h2>Distribution</h2><span class="note" id="xHistNote"></span></header><div class="chart" id="cXHist"></div></div>
+    <div class="panel"><header><h2>Progression by year</h2><span class="note">each dot a flight · click a dot to open it</span></header><div class="chart" id="cXYear"></div></div>
+    <div class="panel"><header><h2>Through the season</h2><span class="note">average by month</span></header><div class="chart" id="cXMonth"></div></div>
+    <div class="panel"><header><h2>Personal best over time</h2><span class="note">each step is a new record · click a point to open it</span></header><div class="chart" id="cXRec"></div></div>
+    <div class="panel full"><header><h2>By site</h2><span class="note">average per site with 3 or more flights · best flight in the tooltip</span></header><div class="chart" id="cXSite"></div></div>
+    <div class="panel full"><header><h2 id="scTitle">Airtime against XC distance</h2><span class="maphead"><label for="scX" class="colorbar">X <select id="scX"></select></label><label for="scY" class="colorbar">Y <select id="scY"></select></label><label for="scColor" class="colorbar">Colour <select id="scColor"></select></label><label for="scSize" class="colorbar">Size <select id="scSize"></select></label></span></header><span class="note" id="scNote">XC distance where XContest scored it, otherwise furthest point from launch · click a dot to open the flight</span><div class="chart" id="cScatter"></div><div class="yearkey" id="yearKey"></div></div>
+    <div class="panel"><header><h2>How long you stay up</h2><span class="note">flights by airtime</span></header><div class="chart" id="cDur"></div></div>
+    <div class="panel"><header><h2>When you launch and land</h2><span class="note">local time · smoothed</span></header><div class="chart" id="cHour"></div><div class="yearkey" id="hourKey"></div></div>
+    <div class="panel full"><header><h2>Gliders</h2><span class="note">one tick per flight, taller = longer · click a glider to filter everything to it</span></header><div class="chart" id="cLanes"></div><div class="tablewrap"><table id="tGliders"></table></div></div>
+    <div class="panel"><header><h2>Which days you fly</h2><span class="note">flying days by weekday</span></header><div class="chart" id="cDow"></div></div>
+    <div class="panel"><header><h2>When good flights launch</h2><span class="note">flights by local takeoff hour · darker = more of them good</span></header><div class="chart" id="cGoodHour"></div></div>
+        <div class="panel full"><header><h2>Your flying rhythm</h2><label for="qualSel" class="colorbar">Quality shows <select id="qualSel"><option value="good">Good flights</option><option value="rate">Good-flight rate</option><option value="air">Airtime</option><option value="best">Best flight</option></select></label></header><div class="statrow" id="rhythmStats"></div>
+      <div class="grid2">
+        <div class="panel"><header><h2>Quantity</h2><span class="note">flying days per month</span></header><div class="chart" id="cRhythm"></div></div>
+        <div class="panel"><header><h2>Quality</h2><span class="note" id="qualNote">good flights per month</span></header><div class="chart" id="cQuality"></div></div>
+      </div></div>
+    <div class="panel full"><header><h2>Trips away</h2></header><span class="note">Your home area each year is where you flew most that year. A trip is a run of flying days elsewhere, with no more than 4 days between them.</span><div class="statrow" id="tripStats"></div><div class="tablewrap"><table id="tTrips"></table></div></div>
+  </div>
 </div>
 
 <div class="tip" id="tip" hidden></div>
@@ -1771,7 +1749,7 @@ function toggleMonth(m) {
   if (ms.length === 12) ms = [m];
   else ms = ms.includes(m) ? ms.filter((x) => x !== m) : [...ms, m];
   state.where.months = ms.sort((a, b) => a - b);
-  renderWhere(filtered());
+  render();
 }
 
 /* sites within 60 km of each other form one region */
@@ -1870,7 +1848,7 @@ function scatterXY(el, pts, o = {}) {
 function renderMonthChips(wl) {
   const set = selMonths(), col = accentCol(), same = (x) => x.length === set.length && x.every((m) => set.includes(m));
   $("#monthPresets").innerHTML = PRESETS.map(([k, n, f]) => `<button type="button" data-k="${k}" aria-pressed="${same(f())}">${n}</button>`).join("");
-  $("#monthPresets").querySelectorAll("button").forEach((b) => b.addEventListener("click", () => { state.where.months = PRESETS.find((p) => p[0] === b.dataset.k)[2](); renderWhere(filtered()); }));
+  $("#monthPresets").querySelectorAll("button").forEach((b) => b.addEventListener("click", () => { state.where.months = PRESETS.find((p) => p[0] === b.dataset.k)[2](); render(); }));
   const per = MONTHS.map((_, i) => { const fl = wl.filter((f) => f.month === i + 1); return { days: uniqDays(fl), good: fl.filter(isGood).length, n: fl.length }; });
   const max = Math.max(1, ...per.map((p) => p.days));
   $("#monthChips").innerHTML = per.map((p, i) => {
@@ -2103,11 +2081,7 @@ function renderTrips(wl, reg) {
   if ($("#tripsMore")) $("#tripsMore").addEventListener("click", () => { state.where.allTrips = !state.where.allTrips; renderTrips(wl, reg); });
   tbl.querySelectorAll("tbody tr").forEach((tr) => tr.addEventListener("click", () => { const x = shown[+tr.dataset.i]; const top = groupSites(x.fl).sort((a, b) => b.n - a.n)[0]; openSiteProfile(top.key); }));
 }
-function openSiteProfile(key) {
-  state.where.siteKey = key;
-  renderWhere(filtered());
-  const el = $("#siteProfile"); if (!el.hidden) el.scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" });
-}
+function openSiteProfile(key) { selectSite(key); }
 function renderSiteProfile(wl, reg) {
   const key = state.where.siteKey, el = $("#siteProfile");
   const fl = key ? wl.filter((f) => siteKey(f) === key) : [];
@@ -2138,6 +2112,30 @@ function syncWhereControls() {
   $("#bValue").value = W.bomb; $("#incTandem").checked = W.tandem; $("#calMetric").value = W.cal; $("#qualSel").value = W.qual || "good";
 }
 function saveWhere() { try { const { siteKey: _s, months: _m, allTrips: _t, ...keep } = state.where; localStorage.setItem("lt-where3", JSON.stringify(keep)); } catch (e) { /* ignore */ } }
+/* Sites: all sites (months, reliability, calendar, XC sites), or one site (profile + its XC debrief) */
+function renderSitesPage() {
+  const all = state.flights, wl = whereFlights(all), reg = buildRegions(groupSites(all));
+  const one = state.siteSel && wl.some((f) => siteKey(f) === state.siteSel) ? state.siteSel : null;
+  if (!one) state.siteSel = null;
+  $("#sitesAll").hidden = !!one; $("#siteOne").hidden = !one;
+  const lp = $("#debLessonPanel");
+  if (!one) {
+    renderMonthChips(wl); renderCards(wl, reg); renderRel(wl); renderSiteCal(wl, reg);
+    $("#xcAll").appendChild(lp);
+    state.deb.site = "all"; renderDebrief(all);
+    return;
+  }
+  state.where.siteKey = one; renderSiteProfile(wl, reg);
+  $("#lessonSlot").appendChild(lp);
+  const xc = debData(all).some((s) => s.key === one);
+  $("#siteXc").hidden = !xc; $("#siteNoXc").hidden = xc;
+  if (xc) { if (state.deb.site !== one) { state.deb.sel = null; state.deb.end = null; } state.deb.site = one; renderDebrief(all); }
+  else $("#siteNoXc").textContent = `No XC debrief here: an XC site needs at least ${state.deb.siteN} flights of ${state.deb.siteKm} km or more (you can change this in Settings).`;
+}
+function selectSite(key) {
+  state.siteSel = key;
+  if (state.page !== "sites") setPage("sites"); else { render(); window.scrollTo(0, $("#page-sites").offsetTop - 10); }
+}
 function renderWhere(list) {
   const wl = whereFlights(list), reg = buildRegions(groupSites(state.flights));
   syncWhereControls();
@@ -2399,10 +2397,7 @@ function renderDebCards(sites, all) {
     </button>`;
   };
   $("#debCards").innerHTML = (sites.length > 1 ? card(all, true) : "") + sites.map((s, i) => card(s, false, i)).join("");
-  $("#debCards").querySelectorAll(".scard").forEach((b) => b.addEventListener("click", () => {
-    D.site = b.dataset.key; D.end = null; D.sel = null; saveDeb(); renderDebrief(filtered());
-    $("#debLessonPanel").scrollIntoView({ behavior: "smooth", block: "start" });
-  }));
+  $("#debCards").querySelectorAll(".scard").forEach((b) => b.addEventListener("click", () => { if (b.dataset.key === "all") return; selectSite(b.dataset.key); }));
 }
 function renderLessons(g, isSite) {
   const L0 = lessons(g, isSite), analysed = g.short.filter((f) => g.ends.get(f) !== "na").length;
@@ -2492,7 +2487,7 @@ function debMapSvg(el, g) {
 
 function selectShort(id) {
   state.deb.sel = id;
-  renderDebrief(filtered());
+  render();
   requestAnimationFrame(() => $("#debDetail").scrollIntoView({ behavior: "smooth", block: "start" }));
 }
 function renderShortTable(g, isSite) {
@@ -2571,12 +2566,12 @@ function renderDebDetail(g) {
     <span class="note">You know what happened better than the track does. Your verdict replaces the automatic one in the counts and takeaways. "Landed on purpose" takes the flight out of the numbers. Saved on this device.</span></div></div>`;
   if (hasAn(f)) debAlt($("#cDebAlt"), f, fin);
   $("#debOpen").addEventListener("click", () => openFlight(f, g.short));
-  $("#debClose").addEventListener("click", () => { D.sel = null; renderDebrief(filtered()); });
+  $("#debClose").addEventListener("click", () => { D.sel = null; render(); });
   $("#debVerdict").addEventListener("change", (e) => {
     if (e.target.value) verdicts[f.id] = e.target.value; else delete verdicts[f.id];
     saveVerdicts();
     if (e.target.value === "purpose") D.sel = null;
-    renderDebrief(filtered());
+    render();
   });
 }
 
@@ -2620,7 +2615,7 @@ function selectFlight(f, quiet) {
   state.fsel = f.id;
   $("#tFl").querySelectorAll("tbody tr").forEach((tr) => tr.classList.toggle("sel", state.flist[+tr.dataset.i] === f));
   $("#flightHost").hidden = false;
-  openFlight(f, state.flist && state.flist.length ? state.flist : filtered(), true);
+  openFlight(f, state.flist && state.flist.length ? state.flist : state.flights, true);
   if (!quiet) requestAnimationFrame(() => $("#flightHost").scrollIntoView({ behavior: "smooth", block: "start" }));
 }
 
@@ -2780,13 +2775,17 @@ function renderOverview(list) {
   });
   barChart($("#cMonths"), byMonth, { yFmt: (v) => `${+v.toFixed(1)}` });
   calendar($("#cCal"), list);
+}
+/* Trends: how am I changing over time? */
+function renderTrends(list) {
+  renderDive(list);
   launchLand($("#cHour"), list);
   const bins = [[0, 900, "<15m"], [900, 1800, "15–30m"], [1800, 3600, "30–60m"], [3600, 7200, "1–2h"], [7200, 10800, "2–3h"], [10800, 14400, "3–4h"], [14400, 18000, "4–5h"], [18000, 1e9, "5h+"]];
   barChart($("#cDur"), bins.map(([a, b, l]) => { const n = list.filter((f) => f.airtime >= a && f.airtime < b).length; return { label: l, value: n, tip: `${l}<br><b>${n}</b> flight${n === 1 ? "" : "s"}` }; }), { yFmt: (v) => +v.toFixed(1) });
   scatter($("#cScatter"), list);
-  const sites = groupSites(list).sort((a, b) => b.air - a.air).slice(0, 10);
-  hbarChart($("#cSites"), sites.map((s) => ({ label: s.label, value: s.air, valueLabel: `${fmtH(s.air)} h`, key: s.key, on: state.site === s.key, tip: `${esc(s.label)}<br><b>${s.n}</b> flights · <b>${fmtH(s.air)}</b> h · best ${fmtKm(s.best)} km` })), { onClick: (d) => { state.site = state.site === d.key ? "all" : d.key; render(); } });
-
+  renderGliders(list);
+  const wl = whereFlights(list), reg = buildRegions(groupSites(state.flights));
+  renderDow(wl); renderGoodHour(wl); renderRhythm(wl); renderTrips(wl, reg);
 }
 function renderGliders(list) {
   const gl = groupGliders(list).sort((a, b) => a.firstEpoch - b.firstEpoch);
@@ -2812,7 +2811,7 @@ function renderRecords(list) {
     ["Most XC points", (f) => (f.xc ? f.xc.pts : 0), (f) => (f.xc ? f.xc.pts.toFixed(1) : "–") + " pts"],
   ];
   $("#records").innerHTML = cats.map(([title, key, val], ci) => {
-    const top = [...list].filter((f) => key(f) > 0).sort((a, b) => key(b) - key(a)).slice(0, 5);
+    const top = [...list].filter((f) => key(f) > 0).sort((a, b) => key(b) - key(a)).slice(0, 3);
     return `<div class="panel"><header><h2>${title}</h2></header>${top.length ? `<ol>${top.map((f, i) => `<li data-id="${esc(f.id)}"><span class="rk">${i + 1}</span><span class="what">${esc(siteLabel(f))}<small>${prettyDate(f.date)}${f.glider ? " · " + esc(f.glider) : ""}</small></span><b>${val(f)}</b></li>`).join("")}</ol>` : `<p class="muted">${ci === 5 ? "Load your XContest CSVs to see scored points." : "No flights."}</p>`}</div>`;
   }).join("");
   $("#records").querySelectorAll("li").forEach((li) => li.addEventListener("click", () => openFlight(list.find((f) => f.id === li.dataset.id), list)));
@@ -2860,26 +2859,24 @@ function render() {
   $("#sampleBanner").hidden = !state.sample;
   document.querySelectorAll("nav.pages button").forEach((b) => b.setAttribute("aria-current", b.dataset.page === state.page ? "page" : "false"));
   PAGES.forEach((p) => { $(`#page-${p}`).hidden = p !== state.page; });
-  if (state.page === "explore") renderDive(list);
-  else if (state.page === "where") renderWhere(list);
-  else if (state.page === "debrief") renderDebrief(list);
-  else if (state.page === "flight") renderFlightPage(list);
+  $("#filters").hidden = !(state.page === "dash" || state.page === "explore");
+  if (!$("#settings").hidden) { syncWhereControls(); syncDebControls(); }
+  if (state.page === "explore") renderTrends(list);
+  else if (state.page === "sites") renderSitesPage();
+  else if (state.page === "flight") renderFlightPage(state.flights);
   else {
     renderTiles(list);
     if (mainMap) mainMap.invalidate();
     renderMap(list);
-    ["overview", "gliders", "sites", "records", "flights"].forEach((t) => { $(`#view-${t}`).hidden = t !== state.tab; $(`#tab-${t}`).setAttribute("aria-selected", t === state.tab); });
-    if (state.tab === "overview") renderOverview(list);
-    if (state.tab === "gliders") renderGliders(list);
-    if (state.tab === "sites") renderSites(list);
-    if (state.tab === "records") renderRecords(list);
-    if (state.tab === "flights") renderFlights(list);
+    renderOverview(list);
+    renderRecords(list);
   }
-  try { localStorage.setItem("lt-tab", state.tab); } catch (e) { /* ignore */ }
   schedulePush();
 }
-const PAGES = ["dash", "explore", "where", "flight", "debrief"];
+const PAGES = ["dash", "flight", "sites", "explore"];
+const OLD_PAGES = { where: "sites", debrief: "sites" };
 function setPage(p) {
+  p = OLD_PAGES[p] || p;
   if (!PAGES.includes(p)) p = "dash";
   if (p === "dash" && state.page !== "dash") lastFitKey = "";
   if (state.inline && p !== "flight") { stopReplay(); state.open = null; state.inline = false; }
@@ -2950,6 +2947,12 @@ function drawDetail() {
 const CARD = document.querySelector("#sheet .card");
 function openFlight(f, list, inline = false) {
   if (!f) return;
+  if (!inline) { // every flight opens on the Flights page
+    state.fsel = f.id; state.fq = ""; if ($("#flQ")) $("#flQ").value = "";
+    hideTip(); setPage("flight");
+    requestAnimationFrame(() => $("#flightHost").scrollIntoView({ block: "start" }));
+    return;
+  }
   stopReplay();
   state.inline = inline;
   if (inline) { if (CARD.parentNode !== $("#flightHost")) $("#flightHost").appendChild(CARD); CARD.setAttribute("role", "region"); CARD.removeAttribute("aria-modal"); $("#sheet").hidden = true; document.body.style.overflow = ""; }
@@ -3027,8 +3030,8 @@ $("#fYear").addEventListener("change", (e) => { state.year = e.target.value; ren
 $("#fSite").addEventListener("change", (e) => { state.site = e.target.value; render(); });
 $("#fGlider").addEventListener("change", (e) => { state.glider = e.target.value; render(); });
 $("#fReset").addEventListener("click", () => { state.year = "all"; state.site = "all"; state.glider = "all"; render(); });
-document.querySelectorAll("nav.tabs button").forEach((b) => b.addEventListener("click", () => { state.tab = b.dataset.tab; render(); }));
-$("#q").addEventListener("input", (e) => { state.q = e.target.value; renderFlights(filtered()); });
+$("#setBtn").addEventListener("click", () => { const s = $("#settings"); s.hidden = !s.hidden; $("#setBtn").setAttribute("aria-expanded", String(!s.hidden)); if (!s.hidden) { syncWhereControls(); syncDebControls(); s.scrollIntoView({ block: "nearest" }); } });
+$("#setClose").addEventListener("click", () => { $("#settings").hidden = true; $("#setBtn").setAttribute("aria-expanded", "false"); });
 $("#dClose").addEventListener("click", closeSheet);
 $("#dPrev").addEventListener("click", () => step(-1));
 $("#dNext").addEventListener("click", () => step(1));
@@ -3037,21 +3040,21 @@ document.addEventListener("keydown", (e) => { if (!state.open) return; if (state
 $("#mIn").addEventListener("click", () => mainMap.zoomBy(2));
 $("#mOut").addEventListener("click", () => mainMap.zoomBy(0.5));
 document.querySelectorAll("nav.pages button").forEach((b) => b.addEventListener("click", () => setPage(b.dataset.page)));
-const whereChange = () => { saveWhere(); renderWhere(filtered()); };
+const whereChange = () => { saveWhere(); render(); };
 $("#gMeasure").addEventListener("change", (e) => { state.where.measure = e.target.value; state.where.value = curM().def; whereChange(); });
 $("#gValue").addEventListener("change", (e) => { const v = parseFloat(e.target.value); if (isFinite(v) && v >= 0) state.where.value = v; whereChange(); });
 $("#bValue").addEventListener("change", (e) => { const v = parseFloat(e.target.value); if (isFinite(v) && v > 0) state.where.bomb = v; whereChange(); });
 $("#incTandem").addEventListener("change", (e) => { state.where.tandem = e.target.checked; whereChange(); });
 $("#qualSel").addEventListener("change", (e) => { state.where.qual = e.target.value; whereChange(); });
 $("#calMetric").addEventListener("change", (e) => { state.where.cal = e.target.value; whereChange(); });
-$("#spClose").addEventListener("click", () => { state.where.siteKey = null; $("#siteProfile").hidden = true; });
-$("#spDash").addEventListener("click", () => { state.site = state.where.siteKey; setPage("dash"); });
-const debChange = () => { saveDeb(); renderDebrief(filtered()); };
+$("#spClose").addEventListener("click", () => { state.siteSel = null; state.where.siteKey = null; render(); window.scrollTo(0, 0); });
+$("#spDash").addEventListener("click", () => { state.site = state.where.siteKey; state.year = "all"; state.glider = "all"; setPage("dash"); });
+const debChange = () => { saveDeb(); render(); };
 const debNum = (id, key, min) => $(id).addEventListener("change", (e) => { const v = parseFloat(e.target.value); if (isFinite(v) && v >= min) { state.deb[key] = v; state.deb.end = null; } debChange(); });
 debNum("#dbSiteN", "siteN", 1); debNum("#dbSiteKm", "siteKm", 1); debNum("#dbCommit", "commitKm", 0.5); debNum("#dbShort", "shortPct", 5);
 $("#dbTandem").addEventListener("change", (e) => { state.deb.tandem = e.target.checked; debChange(); });
 $("#dPlay").addEventListener("click", () => (replay ? stopReplay() : startReplay()));
-$("#flQ").addEventListener("input", (e) => { state.fq = e.target.value; renderFlightPage(filtered()); });
+$("#flQ").addEventListener("input", (e) => { state.fq = e.target.value; renderFlightPage(state.flights); });
 $("#diveSel").addEventListener("change", (e) => { state.dive = e.target.value; try { localStorage.setItem("lt-dive2", state.dive); } catch (err) { /* ignore */ } renderDive(filtered()); });
 $("#scX").addEventListener("change", (e) => { state.scX = e.target.value; try { localStorage.setItem("lt-scx", state.scX); } catch (err) { /* ignore */ } scatter($("#cScatter"), filtered()); });
 $("#scY").addEventListener("change", (e) => { state.scY = e.target.value; try { localStorage.setItem("lt-scy", state.scY); } catch (err) { /* ignore */ } scatter($("#cScatter"), filtered()); });
@@ -3399,7 +3402,9 @@ document.querySelectorAll("#themeChips button").forEach((b) => b.addEventListene
   try { Object.assign(state.where, JSON.parse(localStorage.getItem("lt-where3") || "{}")); } catch (e) { /* ignore */ }
   if (!MEASURES[state.where.measure]) state.where.measure = "airtime";
   try { state.page = localStorage.getItem("lt-page") || "dash"; } catch (e) { state.page = "dash"; }
-  const hp = (location.hash || "").slice(1); if (PAGES.includes(hp)) state.page = hp;
+  state.page = OLD_PAGES[state.page] || state.page;
+  const hp = OLD_PAGES[(location.hash || "").slice(1)] || (location.hash || "").slice(1); if (PAGES.includes(hp)) state.page = hp;
+  state.siteSel = null;
   if (!PAGES.includes(state.page)) state.page = "dash";
   state.deb = { ...DEB_DEF };
   try { Object.assign(state.deb, JSON.parse(localStorage.getItem("pg-deb2") || "{}"), { sel: null, end: null }); } catch (e) { /* ignore */ }
