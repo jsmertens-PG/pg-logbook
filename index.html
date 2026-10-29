@@ -33,13 +33,6 @@
   :root:not([data-theme="light"]) { --bg: #000000; --surface: #070707; --sunk: #101010; --ink: #f1f1f1; --muted: #8d8d8d; --line: #232323; --land: #161616; --accent: #f1f1f1; --hl: #7d7d7d; color-scheme: dark; }
 }
 :root[data-theme="dark"] { --bg: #000000; --surface: #070707; --sunk: #101010; --ink: #f1f1f1; --muted: #8d8d8d; --line: #232323; --land: #161616; --accent: #f1f1f1; --hl: #7d7d7d; color-scheme: dark; }
-/* "Sky" — the first version's look */
-:root[data-style="sky"] { --bg: #eef2f5; --surface: #ffffff; --sunk: #f5f8fa; --ink: #142230; --muted: #5b6b79; --line: #d6dee5; --land: #e1e8ee;
-  --font-display: "Bricolage Grotesque", "Avenir Next", sans-serif; --font-body: "IBM Plex Sans", "Segoe UI", sans-serif; --font-data: "IBM Plex Mono", ui-monospace, monospace; --radius: 10px; }
-@media (prefers-color-scheme: dark) {
-  :root[data-style="sky"]:not([data-theme="light"]) { --bg: #0e141a; --surface: #161f28; --sunk: #121a22; --ink: #e6edf3; --muted: #97a6b4; --line: #26323e; --land: #1b2631; }
-}
-:root[data-style="sky"][data-theme="dark"] { --bg: #0e141a; --surface: #161f28; --sunk: #121a22; --ink: #e6edf3; --muted: #97a6b4; --line: #26323e; --land: #1b2631; }
 
 /* "Hello Kitty": #F62E70 · #F98EAA · #F6BBC4 · #FBFDFB · #FACCD7 */
 :root[data-style="kawaii"] { --bg: #fbfdfb; --surface: #ffffff; --sunk: #fdeef2; --ink: #2a1a20; --muted: #b25a79; --line: #f6bbc4; --land: #faccd7;
@@ -1063,17 +1056,13 @@ function makeSample() {
 /* ---------- styles & colormaps ---------- */
 const STYLES = [
   { key: "mono", name: "Monochrome", stops: null },
-  { key: "sky", name: "Sky (original)", stops: ["#0d366b", "#1c5cab", "#3987e5", "#86b6ef", "#cde2fb"] },
   { key: "rainbow", name: "Rainbow", fixed: true, stops: ["#30123b", "#4662d7", "#36aaf9", "#1ae4b6", "#72fe5e", "#c8ef34", "#faba39", "#f66b19", "#ca2a04", "#7a0403"] },
   { key: "viridis", name: "Viridis", stops: ["#440154", "#482878", "#3e4989", "#31688e", "#26828e", "#1f9e89", "#35b779", "#6ece58", "#b5de2b", "#fde725"] },
   { key: "magma", name: "Magma", stops: ["#000004", "#180f3d", "#440f76", "#721f81", "#9e2f7f", "#cd4071", "#f1605d", "#fd9668", "#feca8d", "#fcfdbf"] },
-  { key: "ocean", name: "Ocean", stops: ["#03122b", "#0a3a63", "#0f6b8f", "#1f9bb0", "#62c7c9", "#bfeee6"] },
   { key: "alpine", name: "Alpine", stops: ["#0f2a1d", "#1f4d36", "#3b7652", "#6e9e6a", "#a9c48a", "#e2dcc0", "#ffffff"] },
   { key: "plasma", name: "Plasma", stops: ["#0d0887", "#41049d", "#6a00a8", "#8f0da4", "#b12a90", "#cc4778", "#e16462", "#f2844b", "#fca636", "#fcce25", "#f0f921"] },
   { key: "ember", name: "Ember", stops: ["#2b0a05", "#6b1508", "#a8320e", "#d9581a", "#f28a2e", "#fbc56b", "#fff1c9"] },
   { key: "lavender", name: "Lavender", stops: ["#2a1640", "#4f2c73", "#7a4ea3", "#a582c7", "#cdb7e0", "#f1eaf7"] },
-  { key: "desert", name: "Desert", stops: ["#3b2314", "#6e4425", "#a3693a", "#c99a5e", "#e3c890", "#f6ecd2"] },
-  { key: "rose", name: "Rose", stops: ["#2d0a1e", "#5e1a3d", "#943061", "#c95a85", "#e99ab5", "#fbe1ea"] },
   { key: "kawaii", name: "Hello Kitty", stops: ["#f62e70", "#f98eaa", "#f6bbc4", "#faccd7", "#fbfdfb"] },
 ];
 /* XC quality of a site: average XC distance of its best quarter of flights, scaled 0–1 across the sites shown (log scale) */
