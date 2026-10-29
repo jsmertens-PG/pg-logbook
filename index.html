@@ -306,6 +306,17 @@ nav.pages { position: sticky; top: 0; z-index: 1500; background: color-mix(in sr
 .story h3 { font-size: 1.05rem; margin: 4px 0 2px; }
 .story p { margin: 0; line-height: 1.5; }
 .story b { font-family: var(--font-data); font-weight: 500; }
+.diary { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; font-size: .88rem; }
+.diary .dots { display: inline-flex; gap: 3px; }
+.diary .dots i { width: 10px; height: 10px; border-radius: 50%; border: 1.5px solid var(--accent); display: inline-block; }
+.diary .dots i.on { background: var(--accent); }
+.notemark { font-size: .9rem; }
+#flightNotes textarea { font: inherit; font-size: .95rem; line-height: 1.5; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: max(5px, var(--radius)); padding: 10px 12px; width: 100%; resize: vertical; min-height: 120px; }
+#flightNotes textarea:focus { outline: 2px solid var(--accent); outline-offset: 0; }
+.feel, .prompts { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: .84rem; }
+.feel button { font-size: 1.25rem; min-height: 38px; min-width: 44px; justify-content: center; padding: 2px 6px; }
+.feel button[aria-pressed="true"] { box-shadow: inset 0 0 0 2px var(--accent), 0 1px 2px var(--gl-sh2); background: color-mix(in srgb, var(--accent) 14%, var(--card)); }
+.prompts button { min-height: 30px; padding: 3px 10px; font-size: .8rem; }
 .lessons { list-style: none; margin: 0; padding: 0; display: grid; counter-reset: l; }
 .lessons li { display: grid; grid-template-columns: 34px 1fr auto; gap: 12px; align-items: baseline; padding: 12px 0; border-bottom: 1px solid var(--line); counter-increment: l; }
 .lessons li::before { content: counter(l); font-family: var(--font-display); font-size: 1.5rem; line-height: 1; }
@@ -426,10 +437,12 @@ nav.pages button[aria-current="page"] { border-bottom-color: var(--accent) !impo
     <div id="page-flight" class="page where" hidden>
     <div class="panel full">
       <header><h2>Flights</h2><input id="flQ" class="flq" type="search" placeholder="Search date, site, glider…" aria-label="Search flights"></header>
+      <div class="diary" id="diaryNudge"></div>
       <span class="note" id="flNote"></span>
       <div class="tablewrap flist"><table id="tFl"></table></div>
     </div>
     <div id="flightHost" hidden></div>
+    <div class="panel full" id="flightNotes" hidden></div>
     <div class="panel full" id="flightVerdict" hidden></div>
   </div>
 
@@ -2648,7 +2661,7 @@ function flightType(f) {
   return "local";
 }
 const FCOLS = [
-  ["epoch", "Date", (f) => f.epoch, (f) => `<span class="mono">${f.date}</span> <span class="muted mono">${f.time}</span>`],
+  ["epoch", "Date", (f) => f.epoch, (f) => `<span class="mono">${f.date}</span> <span class="muted mono">${f.time}</span>${hasNote(f) ? ` <span class="notemark" title="${esc((noteOf(f).t || "").slice(0, 140))}">${noteOf(f).feel != null ? FEELS[noteOf(f).feel] : "✎"}</span>` : ""}`],
   ["site", "Site", (f) => siteLabel(f).toLowerCase(), (f) => `<span class="site">${esc(siteLabel(f))}</span>`],
   ["type", "Type", (f) => flightType(f), (f) => esc(FTYPES[flightType(f)][0])],
   ["airtime", "Airtime", (f) => f.airtime, (f) => fmtH(f.airtime), true],
@@ -2660,10 +2673,11 @@ const FCOLS = [
 ];
 function renderFlightPage(list) {
   const S = state.fsort, col = FCOLS.find((c) => c[0] === S.key) || FCOLS[0], q = (state.fq || "").toLowerCase().trim();
-  let fl = q ? list.filter((f) => `${f.date} ${siteLabel(f)} ${f.glider} ${f.country} ${FTYPES[flightType(f)][0]}`.toLowerCase().includes(q)) : [...list];
+  let fl = q ? list.filter((f) => `${f.date} ${siteLabel(f)} ${f.glider} ${f.country} ${FTYPES[flightType(f)][0]} ${(noteOf(f) || {}).t || ""}`.toLowerCase().includes(q)) : [...list];
   fl.sort((a, b) => { const x = col[2](a), y = col[2](b); return (x > y ? 1 : x < y ? -1 : 0) * S.dir; });
   state.flist = fl;
-  $("#flNote").textContent = `${fl.length} flight${fl.length === 1 ? "" : "s"} · click one to debrief it · click a column to sort`;
+  $("#flNote").textContent = `${fl.length} flight${fl.length === 1 ? "" : "s"} · click one to debrief it · click a column to sort · search also finds words in your notes`;
+  renderDiaryNudge();
   $("#tFl").innerHTML = `<thead><tr>${FCOLS.map((c) => `<th class="sortable${c[4] ? " n" : ""}" data-k="${c[0]}"${c[0] === S.key ? ` data-dir="${S.dir < 0 ? "↓" : "↑"}"` : ""}>${c[1]}</th>`).join("")}</tr></thead><tbody>` +
     fl.map((f, i) => `<tr data-i="${i}"${state.fsel === f.id ? ` class="sel"` : ""}>${FCOLS.map((c) => `<td${c[4] ? ` class="n"` : ""}>${c[3](f)}</td>`).join("")}</tr>`).join("") + `</tbody>`;
   $("#tFl").querySelectorAll("th").forEach((th) => th.addEventListener("click", () => {
@@ -2682,6 +2696,57 @@ function selectFlight(f, quiet) {
   if (!quiet) requestAnimationFrame(() => $("#flightHost").scrollIntoView({ behavior: "smooth", block: "start" }));
 }
 
+/* ---------- diary: your own notes on each flight (saved here and synced through Dropbox with your settings) ---------- */
+const FEELS = ["😖", "😕", "🙂", "😀", "🤩"];
+const FEEL_WORDS = ["rough", "meh", "fine", "good", "epic"];
+const PROMPTS = ["Conditions: ", "What went well: ", "What I learned: ", "Next time I'll ", "Scary moment: "];
+let notes = {};
+const loadNotes = () => { try { notes = JSON.parse(lsGet("pg-notes") || "{}") || {}; } catch (e) { notes = {}; } };
+const noteOf = (f) => notes[f.id] || null;
+const hasNote = (f) => { const n = noteOf(f); return !!(n && ((n.t && n.t.trim()) || n.feel != null)); };
+let noteSaveT = 0;
+function saveNote(f, patch) {
+  const n = { ...(notes[f.id] || {}), ...patch, u: Date.now() };
+  if (!(n.t && n.t.trim()) && n.feel == null) delete notes[f.id]; else notes[f.id] = n;
+  clearTimeout(noteSaveT);
+  noteSaveT = setTimeout(() => { lsSet("pg-notes", JSON.stringify(notes)); schedulePush(); $("#noteSaved").textContent = "Saved"; }, 600);
+  $("#noteSaved").textContent = "Saving…";
+  // mark the row in the list without redrawing the page (keeps the cursor in the box)
+  const tr = [...$("#tFl").querySelectorAll("tbody tr")].find((r) => state.flist[+r.dataset.i] === f);
+  if (tr) tr.querySelector("td").innerHTML = FCOLS[0][3](f);
+  renderDiaryNudge();
+}
+function renderNotes(f) {
+  const box = $("#flightNotes"); box.hidden = false;
+  const n = noteOf(f) || {};
+  box.innerHTML = `<header><h2>Diary</h2><span class="note" id="noteSaved">${n.u ? `last edited ${new Date(n.u).toLocaleDateString()}` : "saved on every device"}</span></header>
+    <div class="feel" role="group" aria-label="How did it feel?"><span class="muted">How did it feel?</span>${FEELS.map((e, i) => `<button type="button" data-v="${i}" aria-pressed="${n.feel === i}" title="${FEEL_WORDS[i]}">${e}</button>`).join("")}</div>
+    <textarea id="noteText" rows="5" placeholder="How was it? What did you learn? What would you do differently next time?">${esc(n.t || "")}</textarea>
+    <div class="prompts"><span class="muted">Start a line:</span>${PROMPTS.map((p) => `<button type="button" data-p="${esc(p)}">${esc(p.replace(/[: ]+$/, ""))}</button>`).join("")}</div>`;
+  const ta = $("#noteText");
+  ta.addEventListener("input", () => saveNote(f, { t: ta.value }));
+  box.querySelectorAll(".feel button").forEach((b) => b.addEventListener("click", () => {
+    const v = +b.dataset.v, cur = (noteOf(f) || {}).feel;
+    saveNote(f, { feel: cur === v ? null : v });
+    box.querySelectorAll(".feel button").forEach((x) => x.setAttribute("aria-pressed", String(cur !== v && +x.dataset.v === v)));
+  }));
+  box.querySelectorAll(".prompts button").forEach((b) => b.addEventListener("click", () => {
+    const p = b.dataset.p, v = ta.value;
+    ta.value = v + (v && !v.endsWith("\n") ? "\n" : "") + p; ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length);
+    saveNote(f, { t: ta.value });
+  }));
+}
+/* the nudge above the list: how many recent flights have notes, and a shortcut to the latest one without */
+function renderDiaryNudge() {
+  const el = $("#diaryNudge"); if (!el) return;
+  const recent = [...state.flights].sort((a, b) => b.epoch - a.epoch).slice(0, 10);
+  if (!recent.length) { el.innerHTML = ""; return; }
+  const done = recent.filter(hasNote).length, todo = recent.find((f) => !hasNote(f)), total = Object.keys(notes).length;
+  el.innerHTML = `<span class="dots" aria-hidden="true">${recent.map((f) => `<i class="${hasNote(f) ? "on" : ""}"></i>`).join("")}</span>
+    <span><b>Diary:</b> notes on ${done} of your last ${recent.length} flights${total ? ` · ${total} entr${total === 1 ? "y" : "ies"} in all` : ""}.</span>
+    ${todo ? `<button type="button" id="diaryGo">Write about ${prettyDate(todo.date)} · ${esc(siteLabel(todo))}</button>` : `<span class="muted">All caught up.</span>`}`;
+  if (todo) $("#diaryGo").addEventListener("click", () => { selectFlight(todo); requestAnimationFrame(() => { $("#flightNotes").scrollIntoView({ block: "center" }); $("#noteText").focus(); }); });
+}
 /* ---------- the verdict ---------- */
 const pctBelow = (v, arr) => (arr.length ? (arr.filter((x) => x < v).length + 0.5 * arr.filter((x) => x === v).length) / arr.length : 0.5);
 const rankOf = (v, arr) => 1 + arr.filter((x) => x > v).length;
@@ -3088,7 +3153,7 @@ function openFlight(f, list, inline = false) {
   resetDelete();
   cursorI = null; if (detailMap) detailMap.setMarker(null);
   $("#dReadout").textContent = "Move along the altitude chart or the track to follow the glider.";
-  if (inline) { state.fsel = f.id; renderVerdict(f); $("#tFl").querySelectorAll("tbody tr").forEach((tr) => tr.classList.toggle("sel", state.flist && state.flist[+tr.dataset.i] === f)); requestAnimationFrame(drawDetail); return; }
+  if (inline) { state.fsel = f.id; renderNotes(f); renderVerdict(f); $("#tFl").querySelectorAll("tbody tr").forEach((tr) => tr.classList.toggle("sel", state.flist && state.flist[+tr.dataset.i] === f)); requestAnimationFrame(drawDetail); return; }
   $("#sheet").hidden = false; document.body.style.overflow = "hidden";
   requestAnimationFrame(drawDetail);
   $("#dClose").focus();
@@ -3324,7 +3389,7 @@ async function dbxSync(quiet) {
    settings.json: deleted flights, Site debrief verdicts, colour scheme, light/dark and page settings
    Deleting a flight moves its IGC to _deleted/ in Dropbox. Needs the files.content.write permission. */
 const CLOUD_DIR = "/_logbook";
-const PREF_KEYS = ["lt-style", "lt-theme", "lt-base", "lt-mode", "lt-dotc", "lt-dots", "lt-scx", "lt-scy", "lt-dive2", "lt-where3", "pg-deb2", "pg-verdicts"];
+const PREF_KEYS = ["pg-notes", "lt-style", "lt-theme", "lt-base", "lt-mode", "lt-dotc", "lt-dots", "lt-scx", "lt-scy", "lt-dive2", "lt-where3", "pg-deb2", "pg-verdicts"];
 const skipPath = (p) => /^\/(_logbook|_deleted)(\/|$)/i.test(p);
 let cloudReady = false, cloudCanWrite = true, cloudApplying = false, cloudPushT = 0, cloudCacheT = 0, cloudLast = "";
 async function dbxGetJson(path) {
@@ -3390,7 +3455,7 @@ async function cloudPull() {
 /* settings that came from another device: put them into effect here */
 function reloadPrefs() {
   const J = (k, d) => { try { return JSON.parse(lsGet(k) || "null") || d; } catch (e) { return d; } };
-  verdicts = J("pg-verdicts", {});
+  verdicts = J("pg-verdicts", {}); loadNotes();
   state.where = { measure: "airtime", value: 120, bomb: 60, tandem: false, cal: "air", months: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12], siteKey: null, ...J("lt-where3", {}) };
   state.deb = { ...DEB_DEF, ...J("pg-deb2", {}), sel: state.deb ? state.deb.sel : null, end: null };
   state.basemap = lsGet("lt-base") || "auto"; state.mapMode = lsGet("lt-mode") || "tracks";
@@ -3510,7 +3575,7 @@ document.querySelectorAll("#themeChips button").forEach((b) => b.addEventListene
   $("#scX").innerHTML = axOpts; $("#scY").innerHTML = axOpts;
   $("#scX").value = state.scX; $("#scY").value = state.scY;
   try { state.dive = localStorage.getItem("lt-dive2") || "xcKm"; } catch (e) { state.dive = "xcKm"; }
-  state.fsort = { key: "epoch", dir: -1 }; state.fq = ""; state.fsel = null;
+  state.fsort = { key: "epoch", dir: -1 }; state.fq = ""; state.fsel = null; loadNotes();
   $("#diveSel").innerHTML = DIVE_PARAMS.map(([k, n]) => `<option value="${k}">${n}</option>`).join("");
   $("#diveSel").value = state.dive;
   $("#baseSel").innerHTML = BASEMAPS.map(([k, n]) => `<option value="${k}">${n}</option>`).join("");
