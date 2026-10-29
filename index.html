@@ -378,6 +378,12 @@ nav.pages button { font-size: 1.15rem; color: var(--ink); padding: 6px 14px; bor
 nav.pages button[aria-current="page"] { border-bottom-color: var(--accent) !important; background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 6%, var(--card)), color-mix(in srgb, var(--accent) 16%, var(--card))); }
 @media (max-width: 700px) { nav.pages button { padding: 7px 4px; font-size: 1rem; } }
 .bottombar { border-top: 0; }
+
+/* phones: the four page tabs share the width equally */
+@media (max-width: 700px) {
+  nav.pages { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+  nav.pages button { width: 100%; justify-content: center; text-align: center; padding: 9px 2px; font-size: 1rem; white-space: nowrap; }
+}
 </style>
 
 <div class="wrap" id="app">
