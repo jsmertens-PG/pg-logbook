@@ -323,6 +323,69 @@ tbody tr.sel td { background: var(--sunk); }
 .verdict { display: grid; gap: 8px; align-content: start; }
 .verdict label { display: grid; gap: 4px; font-size: .8rem; color: var(--muted); }
 .verdict select { max-width: 340px; }
+/* ---------- "Color": the SD Flying Radar look (glossy cards on a light grey page, red→green colours) ---------- */
+:root[data-skin="radar"] { --gl-hl: rgba(255,255,255,.95); --gl-sh: rgba(15,25,40,.38); --gl-sh2: rgba(15,25,40,.10); --gl-ring: rgba(15,25,40,.16);
+  --bg: #f4f6f8; --surface: #ffffff; --sunk: #eceff2; --ink: #0b0b0b; --muted: #5f6670; --line: #e1e5ea; --land: #e6eaee; color-scheme: light;
+  --font-display: "Work Sans", "Helvetica Neue", Arial, sans-serif; --font-body: "Work Sans", "Helvetica Neue", Arial, sans-serif; --radius: 5px;
+  --gl-page: linear-gradient(180deg, #eef1f5, #f8f9fb 40%, #eef1f5); --gl-head: linear-gradient(180deg, #e3e7ec, #f1f3f6); }
+@media (prefers-color-scheme: dark) {
+  :root[data-skin="radar"]:not([data-theme="light"]) { --bg: #0d1013; --surface: #171b20; --sunk: #20252b; --ink: #eef1f4; --muted: #9aa3ad; --line: #2b3139; --land: #1c2127; color-scheme: dark;
+    --gl-hl: rgba(255,255,255,.06); --gl-ring: rgba(255,255,255,.08); --gl-sh: rgba(0,0,0,.6); --gl-sh2: rgba(0,0,0,.4);
+    --gl-page: linear-gradient(180deg, #0b0e11, #12161a 40%, #0b0e11); --gl-head: linear-gradient(180deg, #232930, #1a1f25); }
+}
+:root[data-skin="radar"][data-theme="dark"] { --bg: #0d1013; --surface: #171b20; --sunk: #20252b; --ink: #eef1f4; --muted: #9aa3ad; --line: #2b3139; --land: #1c2127; color-scheme: dark;
+  --gl-hl: rgba(255,255,255,.06); --gl-ring: rgba(255,255,255,.08); --gl-sh: rgba(0,0,0,.6); --gl-sh2: rgba(0,0,0,.4);
+  --gl-page: linear-gradient(180deg, #0b0e11, #12161a 40%, #0b0e11); --gl-head: linear-gradient(180deg, #232930, #1a1f25); }
+:root[data-skin="radar"] body { background: var(--gl-page); background-attachment: fixed; }
+:root[data-skin="radar"] h1 { font-weight: 700; font-size: clamp(1.7rem, 4.5vw, 2.4rem); letter-spacing: -0.01em; }
+:root[data-skin="radar"] h1 em { font-style: normal; }
+:root[data-skin="radar"] h2 { font-weight: 600; font-size: 1.1rem; }
+:root[data-skin="radar"] h2 .q { font-family: var(--font-body); font-weight: 400; font-size: .85em; }
+:root[data-skin="radar"] header.top { border-bottom: 0; padding-bottom: 0; }
+/* cards */
+:root[data-skin="radar"] .page > .panel, :root[data-skin="radar"] .grid2 > .panel, :root[data-skin="radar"] .page > section.panel,
+:root[data-skin="radar"] .settings, :root[data-skin="radar"] .siteprof, :root[data-skin="radar"] #flightHost .card.inline, :root[data-skin="radar"] .dbx {
+  background: var(--surface); border: 0; border-radius: 7px; padding: 14px 16px;
+  box-shadow: 0 0 0 1px var(--gl-ring), inset 0 1px 0 var(--gl-hl), 0 2px 4px var(--gl-sh2), 0 18px 40px -16px var(--gl-sh); }
+:root[data-skin="radar"] .page > .panel > header, :root[data-skin="radar"] .grid2 > .panel > header, :root[data-skin="radar"] .page > section.panel > header, :root[data-skin="radar"] .settings > header {
+  margin: -14px -16px 2px; padding: 10px 16px 8px; background: var(--gl-head); border-bottom: 1px solid color-mix(in srgb, var(--ink) 12%, transparent); border-radius: 7px 7px 0 0; }
+:root[data-skin="radar"] .panel .panel { box-shadow: none; padding: 0; background: transparent; border-radius: 0; }
+:root[data-skin="radar"] .panel .panel > header { margin: 0; padding: 0 0 6px; background: none; border-radius: 0; }
+:root[data-skin="radar"] .dive { border-top: 0; margin-top: 0; padding-top: 14px; }
+:root[data-skin="radar"] #flightHost .card.inline { padding: 18px; }
+:root[data-skin="radar"] .siteprof { border: 0; }
+/* totals as small glossy tiles */
+:root[data-skin="radar"] .tiles { border: 0; gap: 10px; }
+:root[data-skin="radar"] .tile, :root[data-skin="radar"] .tile + .tile { border: 0; padding: 10px 12px; border-radius: 5px;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--tc, var(--muted)) 26%, var(--surface)), color-mix(in srgb, var(--tc, var(--muted)) 46%, var(--surface)));
+  box-shadow: 0 0 0 1px var(--gl-ring), inset 0 1px 0 var(--gl-hl), inset 5px 0 0 var(--tc, var(--muted)), 0 2px 3px var(--gl-sh2), 0 8px 18px -10px var(--gl-sh); }
+:root[data-skin="radar"] .tile b { font-weight: 600; font-family: var(--font-body); font-variant-numeric: tabular-nums; }
+:root[data-skin="radar"] .tile:nth-child(7n+1) { --tc: #0f9d58; } :root[data-skin="radar"] .tile:nth-child(7n+2) { --tc: #2fb35a; }
+:root[data-skin="radar"] .tile:nth-child(7n+3) { --tc: #9ccf3f; } :root[data-skin="radar"] .tile:nth-child(7n+4) { --tc: #ff8c00; }
+:root[data-skin="radar"] .tile:nth-child(7n+5) { --tc: #ef3b2c; } :root[data-skin="radar"] .tile:nth-child(7n+6) { --tc: #00795a; }
+:root[data-skin="radar"] .tile:nth-child(7n+7) { --tc: #5d6b7a; }
+:root[data-skin="radar"] .mapbox { border: 0; border-radius: 7px; overflow: hidden; box-shadow: 0 0 0 1px var(--gl-ring), 0 2px 4px var(--gl-sh2), 0 18px 40px -16px var(--gl-sh); }
+/* buttons and chips */
+:root[data-skin="radar"] button, :root[data-skin="radar"] .btn, :root[data-skin="radar"] select, :root[data-skin="radar"] input[type="search"], :root[data-skin="radar"] input[type="number"] { border-radius: 5px; }
+:root[data-skin="radar"] button, :root[data-skin="radar"] .btn { border: 0; background: linear-gradient(180deg, var(--surface), color-mix(in srgb, var(--ink) 7%, var(--surface)));
+  box-shadow: 0 0 0 1px var(--gl-ring), inset 0 1px 0 var(--gl-hl), 0 1px 2px var(--gl-sh2), 0 3px 8px -3px var(--gl-sh); }
+:root[data-skin="radar"] .btn.primary { background: linear-gradient(180deg, #2fb35a, #0f9d58); color: #fff; }
+:root[data-skin="radar"] button[aria-pressed="true"] { box-shadow: inset 0 0 0 1.5px var(--ink), 0 1px 2px var(--gl-sh2); }
+:root[data-skin="radar"] .scard { border: 0; border-radius: 7px; box-shadow: 0 0 0 1px var(--gl-ring), inset 0 1px 0 var(--gl-hl), 0 2px 3px var(--gl-sh2), 0 8px 18px -10px var(--gl-sh); }
+:root[data-skin="radar"] .meter { border-radius: 2px; overflow: hidden; } :root[data-skin="radar"] .meter i { background-image: linear-gradient(180deg, rgba(255,255,255,.45), rgba(255,255,255,0) 60%) !important; }
+:root[data-skin="radar"] .ev, :root[data-skin="radar"] .badge { border-radius: 4px; }
+/* the page navigation as the radar's sticky day buttons */
+:root[data-skin="radar"] nav.pages { background: color-mix(in srgb, var(--bg) 92%, transparent); border-bottom: 0; gap: 8px; padding: 8px 0; }
+:root[data-skin="radar"] nav.pages button { font-family: var(--font-body); font-weight: 600; font-size: .95rem; color: var(--ink); padding: 7px 14px; border-radius: 5px; border-bottom: 4px solid var(--pc) !important; }
+:root[data-skin="radar"] nav.pages button[aria-current="page"] { background: linear-gradient(180deg, color-mix(in srgb, var(--pc) 34%, var(--surface)), color-mix(in srgb, var(--pc) 56%, var(--surface))); }
+:root[data-skin="radar"] nav.pages button[data-page="dash"] { --pc: #0f9d58; } :root[data-skin="radar"] nav.pages button[data-page="flight"] { --pc: #ff8c00; }
+:root[data-skin="radar"] nav.pages button[data-page="sites"] { --pc: #2fb35a; } :root[data-skin="radar"] nav.pages button[data-page="explore"] { --pc: #ef3b2c; }
+@media (max-width: 700px) { :root[data-skin="radar"] nav.pages button { padding: 7px 4px; font-size: .9rem; } }
+:root[data-skin="radar"] .bottombar { border-top: 0; }
+:root[data-skin="radar"] .tablewrap { border-top: 0; }
+:root[data-skin="radar"] th { background: transparent; }
+:root[data-skin="radar"] .vbig { font-weight: 700; }
+#colorBtn[aria-pressed="true"] { background: linear-gradient(90deg, #ef3b2c, #ff8c00, #9ccf3f, #2fb35a, #0f9d58); color: #fff; border-color: transparent; text-shadow: 0 1px 1px rgba(0,0,0,.35); }
 </style>
 
 <div class="wrap" id="app">
@@ -490,6 +553,7 @@ tbody tr.sel td { background: var(--sunk); }
         <input id="pickFiles" type="file" multiple>
       </label>
       <button id="dbxBtn" type="button" hidden>Connect Dropbox</button>
+      <button id="colorBtn" type="button" aria-pressed="false" title="Switch to the colourful Flying Radar look">Color</button>
       <button id="setBtn" type="button" aria-label="Settings">⚙ Settings</button>
       </div>
       <span class="note">Add IGC files or XContest CSVs from this device; with Dropbox connected they're copied there too.</span>
@@ -1009,6 +1073,7 @@ const STYLES = [
   { key: "lavender", name: "Lavender", stops: ["#2a1640", "#4f2c73", "#7a4ea3", "#a582c7", "#cdb7e0", "#f1eaf7"] },
   { key: "desert", name: "Desert", stops: ["#3b2314", "#6e4425", "#a3693a", "#c99a5e", "#e3c890", "#f6ecd2"] },
   { key: "rose", name: "Rose", stops: ["#2d0a1e", "#5e1a3d", "#943061", "#c95a85", "#e99ab5", "#fbe1ea"] },
+  { key: "radar", name: "Radar", fixed: true, stops: ["#ef3b2c", "#ff8c00", "#9ccf3f", "#2fb35a", "#0f9d58", "#00795a"] },
   { key: "kawaii", name: "Hello Kitty", stops: ["#f62e70", "#f98eaa", "#f6bbc4", "#faccd7", "#fbfdfb"] },
 ];
 /* XC quality of a site: average XC distance of its best quarter of flights, scaled 0–1 across the sites shown (log scale) */
@@ -3272,7 +3337,7 @@ async function dbxSync(quiet) {
    settings.json: deleted flights, Site debrief verdicts, colour scheme, light/dark and page settings
    Deleting a flight moves its IGC to _deleted/ in Dropbox. Needs the files.content.write permission. */
 const CLOUD_DIR = "/_logbook";
-const PREF_KEYS = ["lt-style", "lt-theme", "lt-base", "lt-mode", "lt-dotc", "lt-dots", "lt-scx", "lt-scy", "lt-dive2", "lt-where3", "pg-deb2", "pg-verdicts"];
+const PREF_KEYS = ["lt-skin", "lt-style-prev", "lt-style", "lt-theme", "lt-base", "lt-mode", "lt-dotc", "lt-dots", "lt-scx", "lt-scy", "lt-dive2", "lt-where3", "pg-deb2", "pg-verdicts"];
 const skipPath = (p) => /^\/(_logbook|_deleted)(\/|$)/i.test(p);
 let cloudReady = false, cloudCanWrite = true, cloudApplying = false, cloudPushT = 0, cloudCacheT = 0, cloudLast = "";
 async function dbxGetJson(path) {
@@ -3346,6 +3411,7 @@ function reloadPrefs() {
   state.scX = lsGet("lt-scx") || "xcKm"; state.scY = lsGet("lt-scy") || "airtime"; state.dive = lsGet("lt-dive2") || "xcKm";
   [["#modeSel", state.mapMode], ["#baseSel", state.basemap], ["#scColor", state.dotColor], ["#scSize", state.dotSize], ["#scX", state.scX], ["#scY", state.scY], ["#diveSel", state.dive]].forEach(([s, v]) => { const el = $(s); if (el) el.value = v; });
   applyTheme(lsGet("lt-theme") || "auto");
+  applySkin(lsGet("lt-skin") === "radar", false);
   if (mainMap && mainMap.setBase) mainMap.setBase();
   applyStyle(lsGet("lt-style") || "mono");
 }
@@ -3439,12 +3505,28 @@ function applyTheme(t) {
   schedulePush();
 }
 document.querySelectorAll("#themeChips button").forEach((b) => b.addEventListener("click", () => applyTheme(b.dataset.t)));
+/* "Color": the Flying Radar look. Switching it on also picks the radar colours; off goes back to your previous scheme. */
+function applySkin(on, rerender = true) {
+  const root = document.documentElement;
+  if (on) root.dataset.skin = "radar"; else delete root.dataset.skin;
+  $("#colorBtn").setAttribute("aria-pressed", String(!!on));
+  lsSet("lt-skin", on ? "radar" : null);
+  if (rerender) {
+    if (on && state.style !== "radar") { lsSet("lt-style-prev", state.style); applyStyle("radar"); }
+    else if (!on && state.style === "radar") applyStyle(lsGet("lt-style-prev") || "mono");
+    else { render(); redrawOpen(); }
+    if (mainMap && mainMap.setBase) mainMap.setBase();
+  }
+  schedulePush();
+}
+$("#colorBtn").addEventListener("click", () => applySkin(document.documentElement.dataset.skin !== "radar"));
 
 /* ---------- start ---------- */
 (async () => {
   try { const t = localStorage.getItem("lt-tab"); if (t && document.getElementById(`view-${t}`)) state.tab = t; } catch (e) { /* ignore */ }
   let st = "mono"; try { st = localStorage.getItem("lt-style") || "mono"; } catch (e) { /* ignore */ }
   applyTheme(lsGet("lt-theme") || "auto");
+  applySkin(lsGet("lt-skin") === "radar", false);
   try { state.basemap = localStorage.getItem("lt-base") || "auto"; } catch (e) { state.basemap = "auto"; }
   try { state.mapMode = localStorage.getItem("lt-mode") || "tracks"; } catch (e) { state.mapMode = "tracks"; }
   $("#modeSel").value = state.mapMode;
