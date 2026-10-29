@@ -292,13 +292,15 @@ footer.styles { border-top: 1px solid var(--ink); padding-top: 16px; display: gr
 .setgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); gap: 16px 28px; }
 .setgrid > div { display: grid; gap: 8px; align-content: start; }
 #setBtn[aria-expanded="true"] { border-color: var(--ink); box-shadow: inset 0 0 0 1px var(--ink); }
-/* phones: the four pages become a tab bar at the bottom */
+/* page navigation stays at the top while scrolling; buttons live at the bottom */
+nav.pages { position: sticky; top: 0; z-index: 1500; background: color-mix(in srgb, var(--bg) 94%, transparent); backdrop-filter: blur(6px); margin-top: 0; padding: 8px 0 6px; border-bottom: 1px solid var(--line); }
+.bottombar { border-top: 1px solid var(--ink); padding-top: 16px; display: grid; gap: 14px; }
+.bottombar .bar { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; justify-content: space-between; }
 @media (max-width: 700px) {
-  nav.pages { position: fixed; left: 0; right: 0; bottom: 0; z-index: 1500; margin: 0; gap: 0; justify-content: space-around; flex-wrap: nowrap;
-    background: color-mix(in srgb, var(--bg) 94%, transparent); backdrop-filter: blur(6px); border-top: 1px solid var(--line); padding: 4px 6px calc(4px + env(safe-area-inset-bottom, 0px)); }
-  nav.pages button { flex: 1 1 0; font-size: 1.02rem; padding: 10px 2px 8px; border-bottom: 0; border-top: 3px solid transparent; }
-  nav.pages button[aria-current="page"] { border-top-color: var(--ink); }
-  .wrap { padding-bottom: calc(84px + env(safe-area-inset-bottom, 0px)); }
+  nav.pages { gap: 0; justify-content: space-between; flex-wrap: nowrap; }
+  nav.pages button { font-size: 1.05rem; padding: 6px 2px; }
+  .bottombar .bar { flex-direction: column; align-items: stretch; }
+  .bottombar .actions > * { flex: 1 1 auto; justify-content: center; }
 }
 .story { display: grid; gap: 6px; max-width: 82ch; }
 .story h3 { font-size: 1.05rem; margin: 4px 0 2px; }
@@ -329,16 +331,6 @@ tbody tr.sel td { background: var(--sunk); }
       <span class="eyebrow">Paragliding logbook · read from IGC tracks</span>
       <h1>Jerome's PG <em>Logbook</em></h1>
     </div>
-    <div class="actions">
-      <label class="btn primary" for="pickFolder">Load IGC folder
-        <input id="pickFolder" type="file" webkitdirectory directory multiple>
-      </label>
-      <label class="btn" for="pickFiles">Add files
-        <input id="pickFiles" type="file" multiple>
-      </label>
-      <button id="dbxBtn" type="button" hidden>Connect Dropbox</button>
-      <button id="setBtn" type="button" aria-label="Settings">⚙ Settings</button>
-    </div>
   </header>
 
   <nav class="pages" aria-label="Pages">
@@ -349,37 +341,6 @@ tbody tr.sel td { background: var(--sunk); }
   </nav>
 
   <div id="status" class="status" role="status">Everything is read in your browser. Nothing is uploaded.</div>
-  <div id="dbxBox" hidden></div>
-  <section id="settings" class="settings" hidden aria-label="Settings">
-    <header><h2>Settings</h2><button type="button" id="setClose">Done</button></header>
-    <div class="setgrid">
-      <div><span class="eyebrow">Good flights and bomb-outs</span>
-            <div class="defs">
-        <label for="gMeasure">A good flight is <select id="gMeasure"><option value="airtime">airtime of at least</option><option value="xcKm">XC distance of at least</option><option value="gain">height gained of at least</option></select></label>
-        <label for="gValue"><input id="gValue" type="number" min="0" step="any"> <span id="gUnit">min</span></label>
-        <label for="bValue">A bomb-out is shorter than <input id="bValue" type="number" min="1" step="1"> min</label>
-        <label for="incTandem" class="check"><input id="incTandem" type="checkbox"> Include tandem flights</label>
-      </div></div>
-      <div><span class="eyebrow">XC sites and short flights</span>
-            <div class="defs">
-        <label for="dbSiteN">An XC site has at least <input id="dbSiteN" type="number" min="1" step="1"></label>
-        <label for="dbSiteKm">flights of <input id="dbSiteKm" type="number" min="1" step="1"> km or more</label>
-        <label for="dbCommit">An XC attempt goes more than <input id="dbCommit" type="number" min="0.5" step="0.5"> km from launch</label>
-        <label for="dbShort">Short means under <input id="dbShort" type="number" min="5" max="100" step="5"> % of your median attempt there</label>
-        <label for="dbTandem" class="check"><input id="dbTandem" type="checkbox"> Include tandem flights</label>
-      </div></div>
-      <div><span class="eyebrow">Light or dark</span>
-          <div class="presets" id="themeChips" role="group" aria-label="Light or dark">
-      <button type="button" data-t="auto">Auto (follow device)</button>
-      <button type="button" data-t="light">Light</button>
-      <button type="button" data-t="dark">Dark</button>
-    </div></div>
-      <div><span class="eyebrow">Your flights in this browser</span>
-      <div class="defs"><span id="clearBox" class="confirm"><button id="clearBtn" type="button">Clear</button></span></div></div>
-    </div>
-    <span class="eyebrow">Colour scheme</span>
-    <div class="chips" id="styleChips" role="group" aria-label="Colour style"></div>
-  </section>
   <div id="sampleBanner" class="banner" hidden>These are example flights. Load your IGC folder (renamed or original XContest/Leonardo files, plus any XContest CSVs) to replace them with yours, or drag the folder onto this page.</div>
   <div id="dropHint" class="drop" hidden>Drop IGC files, CSVs or a whole folder</div>
 
@@ -487,6 +448,53 @@ tbody tr.sel td { background: var(--sunk); }
         <div class="panel"><header><h2>Quality</h2><span class="note" id="qualNote">good flights per month</span></header><div class="chart" id="cQuality"></div></div>
       </div></div>
   </div>
+
+  <footer class="bottombar">
+    <div id="dbxBox" hidden></div>
+  <section id="settings" class="settings" hidden aria-label="Settings">
+    <header><h2>Settings</h2><button type="button" id="setClose">Done</button></header>
+    <div class="setgrid">
+      <div><span class="eyebrow">Good flights and bomb-outs</span>
+            <div class="defs">
+        <label for="gMeasure">A good flight is <select id="gMeasure"><option value="airtime">airtime of at least</option><option value="xcKm">XC distance of at least</option><option value="gain">height gained of at least</option></select></label>
+        <label for="gValue"><input id="gValue" type="number" min="0" step="any"> <span id="gUnit">min</span></label>
+        <label for="bValue">A bomb-out is shorter than <input id="bValue" type="number" min="1" step="1"> min</label>
+        <label for="incTandem" class="check"><input id="incTandem" type="checkbox"> Include tandem flights</label>
+      </div></div>
+      <div><span class="eyebrow">XC sites and short flights</span>
+            <div class="defs">
+        <label for="dbSiteN">An XC site has at least <input id="dbSiteN" type="number" min="1" step="1"></label>
+        <label for="dbSiteKm">flights of <input id="dbSiteKm" type="number" min="1" step="1"> km or more</label>
+        <label for="dbCommit">An XC attempt goes more than <input id="dbCommit" type="number" min="0.5" step="0.5"> km from launch</label>
+        <label for="dbShort">Short means under <input id="dbShort" type="number" min="5" max="100" step="5"> % of your median attempt there</label>
+        <label for="dbTandem" class="check"><input id="dbTandem" type="checkbox"> Include tandem flights</label>
+      </div></div>
+      <div><span class="eyebrow">Light or dark</span>
+          <div class="presets" id="themeChips" role="group" aria-label="Light or dark">
+      <button type="button" data-t="auto">Auto (follow device)</button>
+      <button type="button" data-t="light">Light</button>
+      <button type="button" data-t="dark">Dark</button>
+    </div></div>
+      <div><span class="eyebrow">Your flights in this browser</span>
+      <div class="defs"><span id="clearBox" class="confirm"><button id="clearBtn" type="button">Clear</button></span></div></div>
+    </div>
+    <span class="eyebrow">Colour scheme</span>
+    <div class="chips" id="styleChips" role="group" aria-label="Colour style"></div>
+  </section>
+    <div class="bar">
+      <div class="actions">
+      <label class="btn primary" for="pickFolder">Load IGC folder
+        <input id="pickFolder" type="file" webkitdirectory directory multiple>
+      </label>
+      <label class="btn" for="pickFiles">Add files
+        <input id="pickFiles" type="file" multiple>
+      </label>
+      <button id="dbxBtn" type="button" hidden>Connect Dropbox</button>
+      <button id="setBtn" type="button" aria-label="Settings">⚙ Settings</button>
+      </div>
+      <span class="note">Add IGC files or XContest CSVs from this device; with Dropbox connected they're copied there too.</span>
+    </div>
+  </footer>
 </div>
 
 <div class="tip" id="tip" hidden></div>
@@ -3406,7 +3414,7 @@ function renderDbx() {
 async function dbxBoot() {
   renderDbx();
   if (!dbxAvailable()) return;
-  $("#dbxBtn").addEventListener("click", () => { if (dbxConnected() && $("#dbxBox").hidden) dbxSync(false); $("#dbxBox").hidden = false; renderDbx(); });
+  $("#dbxBtn").addEventListener("click", () => { if (dbxConnected() && $("#dbxBox").hidden) dbxSync(false); $("#dbxBox").hidden = false; renderDbx(); $("#dbxBox").scrollIntoView({ block: "nearest" }); });
   const q = new URLSearchParams(location.search);
   if (q.get("dbxkey")) {
     lsSet("pg-dbx-key", q.get("dbxkey")); history.replaceState(null, "", location.pathname + location.hash);
