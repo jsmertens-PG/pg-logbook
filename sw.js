@@ -1,6 +1,6 @@
 /* Keeps the app itself available offline. Your flights live in the browser's storage and in Dropbox,
    never in this cache. Dropbox and map tiles always go straight to the network. */
-const CACHE = "pg-logbook-v28";
+const CACHE = "pg-logbook-v29";
 const SHELL = ["./", "./index.html", "./manifest.webmanifest", "./icon-192.png", "./icon-512.png", "./apple-touch-icon.png",
   "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"];
 self.addEventListener("install", (e) => { e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting())); });
