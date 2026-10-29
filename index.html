@@ -300,6 +300,10 @@ footer.styles { border-top: 1px solid var(--ink); padding-top: 16px; display: gr
   nav.pages button[aria-current="page"] { border-top-color: var(--ink); }
   .wrap { padding-bottom: calc(84px + env(safe-area-inset-bottom, 0px)); }
 }
+.story { display: grid; gap: 6px; max-width: 82ch; }
+.story h3 { font-size: 1.05rem; margin: 4px 0 2px; }
+.story p { margin: 0; line-height: 1.5; }
+.story b { font-family: var(--font-data); font-weight: 500; }
 .lessons { list-style: none; margin: 0; padding: 0; display: grid; counter-reset: l; }
 .lessons li { display: grid; grid-template-columns: 34px 1fr auto; gap: 12px; align-items: baseline; padding: 12px 0; border-bottom: 1px solid var(--line); counter-increment: l; }
 .lessons li::before { content: counter(l); font-family: var(--font-display); font-size: 1.5rem; line-height: 1; }
@@ -420,13 +424,6 @@ tbody tr.sel td { background: var(--sunk); }
   <!-- 3 · Sites: where should I fly, and what do I need to know there? -->
   <div id="page-sites" class="page where" hidden>
     <div id="sitesAll" class="page where">
-          <div class="panel full">
-      <header><h2>Pick months <span class="q">Where should I go at this time of year?</span></h2></header>
-      <div class="presets" id="monthPresets" role="group" aria-label="Month presets"></div>
-      <div class="months" id="monthChips" role="group" aria-label="Months"></div>
-      <p class="summary" id="monthSummary"></p>
-      <div class="cards" id="siteCards"></div>
-    </div>
       <div class="panel full big"><header><h2>Reliability against upside <span class="q">Which sites deliver reliably, and which deliver big?</span></h2></header><span class="note">Sites with 3 or more flights in the months you picked. Further right, more of your flights there were good. Higher up, your best quarter of flights there went further. Bubble size is the number of flights; the dashed lines are your overall averages.</span><div class="chart" id="cRel"></div></div>
           <div class="panel full">
       <header><h2>Site calendar <span class="q">When has each site worked for me?</span></h2><span class="maphead"><label for="calMetric" class="colorbar">Show <select id="calMetric"><option value="air">Airtime</option><option value="flights">Flights</option><option value="good">Good flights</option><option value="rate">Good-flight rate</option><option value="median">Median airtime</option><option value="best">Best flight</option></select></label></span></header>
@@ -434,7 +431,14 @@ tbody tr.sel td { background: var(--sunk); }
       <div class="chart" id="cSiteCal"></div>
       <div id="cellList"></div>
     </div>
-      <div class="panel full" id="xcAll">
+          <div class="panel full">
+      <header><h2>Pick months <span class="q">Where should I go at this time of year?</span></h2></header>
+      <div class="presets" id="monthPresets" role="group" aria-label="Month presets"></div>
+      <div class="months" id="monthChips" role="group" aria-label="Months"></div>
+      <p class="summary" id="monthSummary"></p>
+      <div class="cards" id="siteCards"></div>
+    </div>
+      <div class="panel full" id="xcAll" hidden>
         <div class="panel full"><header><h2>XC sites <span class="q">Where do my XC flights end short?</span></h2></header><span class="note">Click a site for its takeaways, how short flights ended and where you landed.</span><div class="cards" id="debCards"></div></div>
         <div id="debOld" class="banner" hidden></div>
       </div>
@@ -482,7 +486,6 @@ tbody tr.sel td { background: var(--sunk); }
         <div class="panel"><header><h2>Quantity</h2><span class="note">flying days per month</span></header><div class="chart" id="cRhythm"></div></div>
         <div class="panel"><header><h2>Quality</h2><span class="note" id="qualNote">good flights per month</span></header><div class="chart" id="cQuality"></div></div>
       </div></div>
-    <div class="panel full"><header><h2>Trips away</h2></header><span class="note">Your home area each year is where you flew most that year. A trip is a run of flying days elsewhere, with no more than 4 days between them.</span><div class="statrow" id="tripStats"></div><div class="tablewrap"><table id="tTrips"></table></div></div>
   </div>
 </div>
 
@@ -2622,6 +2625,60 @@ function selectFlight(f, quiet) {
 /* ---------- the verdict ---------- */
 const pctBelow = (v, arr) => (arr.length ? (arr.filter((x) => x < v).length + 0.5 * arr.filter((x) => x === v).length) / arr.length : 0.5);
 const rankOf = (v, arr) => 1 + arr.filter((x) => x > v).length;
+/* "What happened": a few sentences reading the flight against your other flights at the same site */
+function flightStory(f, here) {
+  const out = [], mins = (h) => Math.round(Math.abs(h) * 60), clock = (t) => hhmm(f.hour + t / 3600);
+  const peers = here.filter((x) => x !== f), anPeers = peers.filter((x) => hasAn(x) && x.an.th && x.an.th.length);
+  const med = (fl, g) => { const v = fl.map(g).filter((x) => x != null && isFinite(x)); return v.length >= 2 ? median(v) : null; };
+  // launch time against your good flights here
+  const good = peers.filter(isGood);
+  if (good.length >= 2) {
+    const gh = median(good.map((x) => x.hour)), d = f.hour - gh;
+    out.push(Math.abs(d) < 1 / 3 ? `Launched at <b>${f.time}</b>, right when your good flights here usually get going (${hhmm(gh)}).`
+      : `Launched at <b>${f.time}</b>, ${mins(d)} min ${d < 0 ? "earlier" : "later"} than your good flights here usually do (${hhmm(gh)}).`);
+  } else out.push(`Launched at <b>${f.time}</b> and landed at <b>${hhmm(f.hour + f.airtime / 3600)}</b>.`);
+  if (!hasAn(f) || !f.an.th) return out;
+  const us = usefulTh(f);
+  // climbs
+  if (us.length) {
+    const ac = avg(us.map((t) => t[5])), mc = med(anPeers, (x) => { const u2 = usefulTh(x); return u2.length ? avg(u2.map((t) => t[5])) : null; });
+    const best = us.reduce((a, t) => (t[3] - t[2] > a[3] - a[2] ? t : a));
+    let s = `You found <b>${us.length}</b> climb${us.length === 1 ? "" : "s"} worth 80 m or more, averaging <b>${ac.toFixed(1)} m/s</b>`;
+    if (mc != null) s += Math.abs(ac - mc) < 0.2 ? `, about your usual here` : ac > mc ? `, stronger than your usual ${mc.toFixed(1)} m/s here` : `, weaker than your usual ${mc.toFixed(1)} m/s here`;
+    s += `. The best took you up ${fmtM(best[3] - best[2])} m at ${best[5].toFixed(1)} m/s around ${clock(best[0])}.`;
+    out.push(s);
+    // where you left climbs
+    const lh = median(us.map((t) => t[3] - f.launchAlt)), ml = med(anPeers, (x) => { const u2 = usefulTh(x); return u2.length ? median(u2.map((t) => t[3] - x.launchAlt)) : null; });
+    const early = us.filter((t) => t[6] >= 0.8).length;
+    let h = `You typically left climbs ${fmtRel(lh)}`;
+    if (ml != null && Math.abs(lh - ml) >= 150) h += `, ${lh < ml ? "lower" : "higher"} than usual here (${fmtRel(ml)})`;
+    h += early ? `, and left ${early} of ${us.length} while they were still working.` : ", mostly once they had faded.";
+    out.push(h);
+  } else out.push("No climb gained 80 m or more: this flight was mostly gliding or soaring.");
+  // glides
+  const gl = (f.an.gl || []).filter((g) => g[3] > 30 && g[2] > 0.3);
+  if (gl.length) {
+    const ld = (gl.reduce((a, g) => a + g[2], 0) * 1000) / gl.reduce((a, g) => a + g[3], 0), lg = gl.reduce((a, g) => (g[2] > a[2] ? g : a));
+    out.push(`Your glides averaged <b>1:${Math.round(ld)}</b> over the ground; the longest went ${fmtKm(lg[2])} km ${compass(lg[4]) ? "to the " + compass(lg[4]) : ""} at 1:${Math.round((lg[2] * 1000) / lg[3])}.`);
+  }
+  // low saves: dropping into the bottom quarter of the flight's height range after being high, then climbing out again
+  const tr = f.track, lo = f.landAlt + 0.25 * (f.maxAlt - f.landAlt), hi = f.landAlt + 0.6 * (f.maxAlt - f.landAlt);
+  let saves = 0, wasHigh = false, low = false;
+  for (const p of tr) { if (p[2] >= hi) { if (low && wasHigh) saves++; wasHigh = true; low = false; } else if (wasHigh && p[2] <= lo) low = true; }
+  if (saves) out.push(`You got low and climbed back out <b>${saves}</b> time${saves === 1 ? "" : "s"}.`);
+  // wind
+  const w = windOf(f.an.th), mw = med(anPeers, (x) => { const ww = windOf(x.an.th); return ww ? ww.spd : null; });
+  if (w) out.push(`The drift of your circles suggests about <b>${Math.round(w.spd)} km/h</b> of wind from the ${compass(w.from)}${mw != null && Math.abs(w.spd - mw) >= 4 ? `, ${w.spd > mw ? "windier" : "calmer"} than your usual ${Math.round(mw)} km/h here` : ""}.`);
+  // how it ended
+  const fin = finalOf(f);
+  if (fin && !fin.none && fin.km > 0.5) {
+    let e = `It ended with a final glide of ${fmtKm(fin.km)} km from your last good climb, ${fmtM(fin.loss)} m above the landing${fin.ld ? `, at 1:${Math.round(fin.ld)}` : ""}`;
+    if (fin.hw != null && Math.abs(fin.hw) >= 5) e += fin.hw > 0 ? `, into a headwind of about ${Math.round(fin.hw)} km/h` : `, with a tailwind of about ${Math.round(-fin.hw)} km/h`;
+    e += fin.after.length ? `, after ${fin.after.length} weak tr${fin.after.length === 1 ? "y" : "ies"} to climb again.` : ".";
+    out.push(e);
+  }
+  return out;
+}
 function renderVerdict(f) {
   const box = $("#flightVerdict"); box.hidden = false;
   const type = flightType(f), T = FTYPES[type];
@@ -2681,6 +2738,7 @@ function renderVerdict(f) {
     <div class="verdict-head"><span class="vtype">${esc(T[0])}</span><span class="vbig" style="border-color:${col}">${esc(verdict[0])}</span></div>
     <p class="vline">${esc(verdict[1])} <span class="muted">${esc(T[0])}: ${esc(T[1])}.</span></p>
     ${xcLine}
+    <div class="story"><h3>What happened</h3>${flightStory(f, here).map((s) => `<p>${s}</p>`).join("")}</div>
     ${badges.length ? `<div class="vbadges">${badges.map((b) => `<span class="ev strong">${esc(b)}</span>`).join("")}</div>` : ""}
     <div class="grid2"><div class="tablewrap"><table class="static"><thead><tr><th></th><th class="n">This flight</th><th class="n">Median here</th><th class="n">Rank here</th><th class="n">Rank overall</th></tr></thead><tbody>${rows}</tbody></table></div>
     <dl class="kv debfacts">${facts.map(([a, b]) => `<dt>${a}</dt><dd>${esc(b)}</dd>`).join("")}</dl></div>`;
@@ -2785,7 +2843,7 @@ function renderTrends(list) {
   scatter($("#cScatter"), list);
   renderGliders(list);
   const wl = whereFlights(list), reg = buildRegions(groupSites(state.flights));
-  renderDow(wl); renderGoodHour(wl); renderRhythm(wl); renderTrips(wl, reg);
+  renderDow(wl); renderGoodHour(wl); renderRhythm(wl);
 }
 function renderGliders(list) {
   const gl = groupGliders(list).sort((a, b) => a.firstEpoch - b.firstEpoch);
