@@ -2702,7 +2702,7 @@ const hasNote = (f) => { const n = noteOf(f); return !!(n && ((n.t && n.t.trim()
 let noteSaveT = 0;
 function saveNote(f, patch) {
   const n = { ...(notes[f.id] || {}), ...patch, u: Date.now() };
-  if (!(n.t && n.t.trim()) && n.feel == null) delete notes[f.id]; else notes[f.id] = n;
+  notes[f.id] = n;   // an emptied note stays as a dated blank, so clearing it reaches the other devices too
   clearTimeout(noteSaveT);
   noteSaveT = setTimeout(() => { lsSet("pg-notes", JSON.stringify(notes)); schedulePush(); $("#noteSaved").textContent = "Saved"; }, 600);
   $("#noteSaved").textContent = "Saving…";
@@ -2736,7 +2736,7 @@ function renderDiaryNudge() {
   const el = $("#diaryNudge"); if (!el) return;
   const recent = [...state.flights].sort((a, b) => b.epoch - a.epoch).slice(0, 10);
   if (!recent.length) { el.innerHTML = ""; return; }
-  const done = recent.filter(hasNote).length, todo = recent.find((f) => !hasNote(f)), total = Object.keys(notes).length;
+  const done = recent.filter(hasNote).length, todo = recent.find((f) => !hasNote(f)), total = Object.values(notes).filter((n) => (n.t && n.t.trim()) || n.feel != null).length;
   el.innerHTML = `<span class="dots" aria-hidden="true">${recent.map((f) => `<i class="${hasNote(f) ? "on" : ""}"></i>`).join("")}</span>
     <span><b>Diary:</b> notes on ${done} of your last ${recent.length} flights${total ? ` · ${total} entr${total === 1 ? "y" : "ies"} in all` : ""}.</span>
     ${todo ? `<button type="button" id="diaryGo">Write about ${prettyDate(todo.date)} · ${esc(siteLabel(todo))}</button>` : `<span class="muted">All caught up.</span>`}`;
@@ -3424,29 +3424,77 @@ async function addFiles(list) {
 }
 const prefsSnapshot = () => { const p = {}; for (const k of PREF_KEYS) { const v = lsGet(k); if (v != null) p[k] = v; } return p; };
 const cloudBody = () => JSON.stringify({ prefs: prefsSnapshot(), deleted: state.deleted });
+/* Settings, verdicts and diary notes are merged, never overwritten: each device remembers what it last agreed with
+   Dropbox (pg-cloud-base), so a change made on one device and a change made on another both survive.
+   Diary entries are merged one by one (the newest edit of each wins). Every device checks again when it comes back
+   into view, so a note written on the laptop shows up on the desktop without a reload. */
+const J0 = (s, d) => { try { const v = JSON.parse(s); return v == null ? d : v; } catch (e) { return d; } };
+const delKey = (d) => (typeof d === "string" ? d : d.id);
+function mergeEntry(k, base, mine, theirs) {
+  const b = J0(base, {}), m = J0(mine, {}), t = J0(theirs, {}), out = {};
+  for (const id of new Set([...Object.keys(m), ...Object.keys(t)])) {
+    if (k === "pg-notes") { const x = m[id], y = t[id]; out[id] = !x ? y : !y ? x : ((y.u || 0) > (x.u || 0) ? y : x); continue; }
+    // other maps (verdicts): a key one side removed since the last sync stays removed
+    if (!(id in m) && id in b && t[id] === b[id]) continue;
+    if (!(id in t) && id in b && m[id] === b[id]) continue;
+    out[id] = id in m ? m[id] : t[id];
+  }
+  return JSON.stringify(out);
+}
+function mergeCloud(base, mine, theirs) {
+  const bp = (base && base.prefs) || {}, mp = mine.prefs, tp = (theirs && theirs.prefs) || {}, prefs = {};
+  for (const k of PREF_KEYS) {
+    const b = bp[k], m = mp[k], t = tp[k];
+    let v;
+    if (m === t) v = m;
+    else if (m === b) v = t;            // only Dropbox changed
+    else if (t === b) v = m;            // only this device changed
+    else if (k === "pg-notes" || k === "pg-verdicts") v = mergeEntry(k, b, m, t);
+    else v = base || t == null ? m : t;  // both changed: this device wins, except on its first sync (it takes Dropbox's)
+    if (v != null) prefs[k] = v;
+  }
+  const bd = (base && base.deleted) || [], td = (theirs && theirs.deleted) || [], md = mine.deleted || [];
+  const ids = (l) => new Set(l.map(delKey)), bI = ids(bd), mI = ids(md), tI = ids(td);
+  const deleted = [...md.filter((d) => tI.has(delKey(d)) || !bI.has(delKey(d))), ...td.filter((d) => !mI.has(delKey(d)) && !bI.has(delKey(d)))];
+  return { prefs, deleted };
+}
+let cloudSyncing = null, cloudSeenT = 0;
 function schedulePush() {
   if (!cloudReady || cloudApplying || !cloudCanWrite || state.sample || !dbxConnected()) return;
-  clearTimeout(cloudPushT); cloudPushT = setTimeout(cloudPush, 2000);
+  clearTimeout(cloudPushT); cloudPushT = setTimeout(() => cloudSync(), 2000);
 }
-async function cloudPush() {
-  const body = cloudBody(); if (body === cloudLast) return;
-  const t = Date.now();
-  try { await dbxPut(`${CLOUD_DIR}/settings.json`, JSON.stringify({ v: 1, updated: t, ...JSON.parse(body) })); cloudLast = body; lsSet("pg-cloud-t", String(t)); } catch (e) { /* shown in the Dropbox panel */ }
+async function cloudSync() {
+  if (cloudSyncing) return cloudSyncing;
+  cloudSyncing = (async () => {
+    if (noteSaveT) { clearTimeout(noteSaveT); noteSaveT = 0; lsSet("pg-notes", JSON.stringify(notes)); }
+    const theirs = await dbxGetJson(`${CLOUD_DIR}/settings.json`);
+    const base = J0(lsGet("pg-cloud-base"), null), mine = JSON.parse(cloudBody());
+    const merged = mergeCloud(base, mine, theirs), mBody = JSON.stringify(merged);
+    if (mBody !== JSON.stringify(mine)) {
+      cloudApplying = true;
+      const typing = document.activeElement && document.activeElement.id === "noteText";
+      try {
+        for (const k of PREF_KEYS) lsSet(k, merged.prefs[k] != null ? merged.prefs[k] : null);
+        state.deleted = merged.deleted; state.flights = state.flights.filter((f) => !isDeleted(f));
+        reloadPrefs(); save();
+        if (cloudReady && !typing) render();
+      } finally { cloudApplying = false; }
+    }
+    const tBody = theirs ? JSON.stringify({ prefs: theirs.prefs || {}, deleted: theirs.deleted || [] }) : "";
+    if (mBody !== tBody && cloudCanWrite && !state.sample) await dbxPut(`${CLOUD_DIR}/settings.json`, JSON.stringify({ v: 2, updated: Date.now(), ...merged }));
+    lsSet("pg-cloud-base", mBody); cloudSeenT = Date.now();
+  })();
+  try { await cloudSyncing; } catch (e) { console.warn("settings sync:", e); } finally { cloudSyncing = null; }
 }
-async function cloudPull() {
-  const s = await dbxGetJson(`${CLOUD_DIR}/settings.json`);
-  if (!s) { cloudLast = ""; return; }
-  if ((s.updated || 0) <= (+lsGet("pg-cloud-t") || 0)) { cloudLast = ""; return; } // this device is newer: it will push
-  cloudApplying = true;
-  try {
-    for (const k of PREF_KEYS) lsSet(k, s.prefs && s.prefs[k] != null ? s.prefs[k] : null);
-    state.deleted = Array.isArray(s.deleted) ? s.deleted : [];
-    state.flights = state.flights.filter((f) => !isDeleted(f));
-    lsSet("pg-cloud-t", String(s.updated || Date.now()));
-    reloadPrefs();
-    cloudLast = cloudBody();
-  } finally { cloudApplying = false; }
+const cloudPull = cloudSync;
+// coming back to the app (another tab, window or the phone woken up): pick up what other devices changed
+function cloudRecheck() {
+  if (document.visibilityState !== "visible" || !cloudReady || dbxBusy || !dbxConnected() || state.sample) return;
+  if (Date.now() - cloudSeenT > 15000) cloudSync();
 }
+document.addEventListener("visibilitychange", cloudRecheck);
+window.addEventListener("focus", cloudRecheck);
+setInterval(cloudRecheck, 5 * 60 * 1000);
 /* settings that came from another device: put them into effect here */
 function reloadPrefs() {
   const J = (k, d) => { try { return JSON.parse(lsGet(k) || "null") || d; } catch (e) { return d; } };
